@@ -1,0 +1,39 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  admin_id   Int      @id @default(autoincrement())
+  name       String
+  email      String   @unique
+  password   String
+  createdAt  DateTime @default(now())
+}
+
+model Employee {
+  emp_id      Int      @id @default(autoincrement())
+  name        String
+  email       String   @unique
+  password    String?
+  is_verified Boolean  @default(false)
+  status      String   @default("Inactive")
+  createdAt   DateTime @default(now())
+  activationTokens ActivationToken[]
+
+}
+
+model ActivationToken {
+  id      Int      @id @default(autoincrement())
+  token   String   @unique
+  emp_id  Int
+  expiry  DateTime
+  isUsed  Boolean  @default(false)
+
+  employee Employee @relation(fields: [emp_id], references: [emp_id])
+}

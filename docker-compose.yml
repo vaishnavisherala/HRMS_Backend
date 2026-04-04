@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+
+  db:
+    image: postgres:17-alpine
+    container_name: hrms
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pranav12345
+      POSTGRES_DB: hrms
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./local_data.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    container_name: hrms_backend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://postgres:pranav12345@db:5432/hrms
+      JWT_SECRET: your_jwt_secret
+      JWT_EXPIRES_IN: 1d
+      CLIENT_URL: http://localhost:3000
+      MAIL_HOST: smtp.gmail.com
+      MAIL_PORT: 587
+      MAIL_USER: vaishnavisherala1@gmail.com
+      MAIL_PASS: yyzzyrrvnolxzdwn
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "npx prisma migrate deploy && node index.js"
+
+volumes:
+  postgres_data:
