@@ -61,44 +61,45 @@ exports.createEmployee = async (req, res) => {
   try {
     const { name, email } = req.body;
 
-    // Check if employee already exists
     const existing = await prisma.employee.findUnique({
       where: { email },
     });
 
     if (existing) {
       return res.status(400).json({
-        message: "Employee with this email already exists",
+        message: "Employee already exists",
       });
     }
 
-    // Create employee
     const emp = await prisma.employee.create({
-      data: {
-        name,
-        email,
-      },
+      data: { name, email },
     });
 
+    // 🔥 Generate token
     const token = uuidv4();
 
     await prisma.activationToken.create({
       data: {
         token,
         emp_id: emp.emp_id,
-        expiry: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        expiry: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hrs
       },
     });
 
-    const link = `${process.env.CLIENT_URL}/activate/${token}`;
+    // 🔥 Activation link
+const link = `https://uneuphemistically-unupbraiding-elizabet.ngrok-free.dev/activate/${token}`;    console.log("Activation Link:", link); // debug
 
     await transporter.sendMail({
-      to: emp.email,
-      subject: "Activate Account",
-      html: `<a href="${link}">Activate your account</a>`,
+      to: email,
+      subject: "Activate your account",
+      html: `
+        <h3>Welcome to HRMS</h3>
+        <p>Click below to activate your account:</p>
+        <a href="${link}">${link}</a>
+      `,
     });
 
-    res.json({ message: "Employee created & email sent" });
+    res.json({ message: "Employee created & activation email sent" });
 
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -109,15 +110,35 @@ exports.createEmployee = async (req, res) => {
 
 exports.activateEmployee = async (req, res) => {
   try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ message: "Token & password required" });
+    }
+
     const record = await prisma.activationToken.findUnique({
-      where: { token: req.body.token },
+      where: { token },
     });
 
-    if (!record || record.isUsed)
+    // ❌ Invalid token
+    if (!record) {
       return res.status(400).json({ message: "Invalid token" });
+    }
 
-    const hash = await bcrypt.hash(req.body.password, 10);
+    // ❌ Already used
+    if (record.isUsed) {
+      return res.status(400).json({ message: "Token already used" });
+    }
 
+    // ❌ Expired
+    if (new Date() > record.expiry) {
+      return res.status(400).json({ message: "Token expired" });
+    }
+
+    // 🔐 Hash password
+    const hash = await bcrypt.hash(password, 10);
+
+    // ✅ Update employee
     await prisma.employee.update({
       where: { emp_id: record.emp_id },
       data: {
@@ -127,12 +148,14 @@ exports.activateEmployee = async (req, res) => {
       },
     });
 
+    // ✅ Mark token used
     await prisma.activationToken.update({
-      where: { token: req.body.token },
+      where: { token },
       data: { isUsed: true },
     });
 
-    res.json({ message: "Account activated" });
+    res.json({ message: "Account activated successfully" });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
