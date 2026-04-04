@@ -22,7 +22,7 @@ services:
       retries: 5
 
   backend:
-    build: .
+    image:  pranav091104/hrms-backend:latest 
     container_name: hrms_backend
     restart: always
     ports:
@@ -31,6 +31,11 @@ services:
       DATABASE_URL: postgresql://postgres:pranav12345@db:5432/hrms
       JWT_SECRET: your_jwt_secret
       JWT_EXPIRES_IN: 1d
+      CLIENT_URL: http://localhost:3000
+      MAIL_HOST: smtp.gmail.com
+      MAIL_PORT: 587
+      MAIL_USER: vaishnavisherala1@gmail.com
+      MAIL_PASS: yyzzyrrvnolxzdwn
     depends_on:
       db:
         condition: service_healthy
