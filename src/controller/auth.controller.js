@@ -6,7 +6,7 @@ const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 const transporter = require("../config/mailer");
 
-// 🔹 REGISTER ADMIN (only once)
+// ✅ REGISTER ADMIN
 exports.registerAdmin = async (req, res) => {
   try {
     const exists = await prisma.admin.findFirst();
@@ -31,6 +31,9 @@ exports.registerAdmin = async (req, res) => {
   }
 };
 
+
+
+// ✅ ADMIN LOGIN (FIXED)
 exports.adminLogin = async (req, res) => {
   try {
     const admin = await prisma.admin.findUnique({
@@ -51,12 +54,23 @@ exports.adminLogin = async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    res.json({ token, admin });
+    // ✅ IMPORTANT FIX
+    res.json({
+      token,
+      user: {
+        ...admin,
+        role: "Admin"
+      }
+    });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
+
+
+// ✅ CREATE EMPLOYEE + SEND EMAIL
 exports.createEmployee = async (req, res) => {
   try {
     const { name, email } = req.body;
@@ -75,24 +89,22 @@ exports.createEmployee = async (req, res) => {
       data: { name, email },
     });
 
-    // 🔥 Generate token
     const token = uuidv4();
 
     await prisma.activationToken.create({
       data: {
         token,
         emp_id: emp.emp_id,
-        expiry: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hrs
+        expiry: new Date(Date.now() + 24 * 60 * 60 * 1000),
       },
     });
 
-    // 🔥 Activation link
-const link =`https://unguillotined-theistically-murray.ngrok-free.dev/activate/${token}`;
+    const link = `https://b0de-103-71-64-6.ngrok-free.app/activate/${token}`;
 
-console.log("Activation Link:", link); // debug
+    console.log("Activation Link:", link);
 
+    // ⚠️ If mail error → comment this block
     await transporter.sendMail({
-      from: process.env.MAIL_USER,
       to: email,
       subject: "Activate your account",
       html: `
@@ -111,37 +123,26 @@ console.log("Activation Link:", link); // debug
 
 
 
+// ✅ ACTIVATE EMPLOYEE
 exports.activateEmployee = async (req, res) => {
   try {
     const { token, password } = req.body;
-
-    if (!token || !password) {
-      return res.status(400).json({ message: "Token & password required" });
-    }
 
     const record = await prisma.activationToken.findUnique({
       where: { token },
     });
 
-    // ❌ Invalid token
-    if (!record) {
+    if (!record)
       return res.status(400).json({ message: "Invalid token" });
-    }
 
-    // ❌ Already used
-    if (record.isUsed) {
+    if (record.isUsed)
       return res.status(400).json({ message: "Token already used" });
-    }
 
-    // ❌ Expired
-    if (new Date() > record.expiry) {
+    if (new Date() > record.expiry)
       return res.status(400).json({ message: "Token expired" });
-    }
 
-    // 🔐 Hash password
     const hash = await bcrypt.hash(password, 10);
 
-    // ✅ Update employee
     await prisma.employee.update({
       where: { emp_id: record.emp_id },
       data: {
@@ -151,7 +152,6 @@ exports.activateEmployee = async (req, res) => {
       },
     });
 
-    // ✅ Mark token used
     await prisma.activationToken.update({
       where: { token },
       data: { isUsed: true },
@@ -164,6 +164,9 @@ exports.activateEmployee = async (req, res) => {
   }
 };
 
+
+
+// ✅ EMPLOYEE LOGIN (FIXED)
 exports.employeeLogin = async (req, res) => {
   try {
     const emp = await prisma.employee.findUnique({
@@ -187,7 +190,39 @@ exports.employeeLogin = async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    res.json({ token, emp });
+    // ✅ IMPORTANT FIX
+    res.json({
+      token,
+      user: {
+        ...emp,
+        role: "Employee"
+      }
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+
+// ✅ GET EMPLOYEES (FIXED FORMAT)
+exports.getEmployees = async (req, res) => {
+  try {
+    const employees = await prisma.employee.findMany({
+      select: {
+        emp_id: true,
+        name: true,
+        email: true,
+        status: true,
+        is_verified: true,
+        createdAt: true,
+      },
+    });
+
+    // ✅ IMPORTANT FIX
+    res.json({ employees });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

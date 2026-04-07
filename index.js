@@ -1,6 +1,11 @@
 require("dotenv").config();  // 🔥 must be first line
 const express = require("express");
+
+const cors=require('cors');
 const app = express();
+
+app.use(cors()); // ✅ VERY IMPORTANT
+
 
 app.use(express.json());
 
