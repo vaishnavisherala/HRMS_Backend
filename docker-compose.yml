@@ -23,6 +23,8 @@ services:
 
   backend:
     image:  pranav091104/hrms-backend:latest 
+    env_file:
+      - ./.env
     container_name: hrms_backend
     restart: always
     ports:
@@ -34,13 +36,13 @@ services:
       CLIENT_URL: http://localhost:3000
       MAIL_HOST: smtp.gmail.com
       MAIL_PORT: 587
-      MAIL_USER: vaishnavisherala1@gmail.com
-      MAIL_PASS: yyzzyrrvnolxzdwn
+      MAIL_USER: pranavpawale136@gmail.com
+      MAIL_PASS: baxpliiwxydnjgci
     depends_on:
       db:
         condition: service_healthy
     command: >
-      sh -c "npx prisma migrate deploy && node index.js"
-
+      sh -c "npx prisma migrate resolve --applied 20260402122232_init && npx prisma migrate deploy && node index.js"
 volumes:
   postgres_data:
+

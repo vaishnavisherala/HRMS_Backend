@@ -87,9 +87,12 @@ exports.createEmployee = async (req, res) => {
     });
 
     // 🔥 Activation link
-const link = `https://uneuphemistically-unupbraiding-elizabet.ngrok-free.dev/activate/${token}`;    console.log("Activation Link:", link); // debug
+const link =`https://unguillotined-theistically-murray.ngrok-free.dev/activate/${token}`;
+
+console.log("Activation Link:", link); // debug
 
     await transporter.sendMail({
+      from: process.env.MAIL_USER,
       to: email,
       subject: "Activate your account",
       html: `
