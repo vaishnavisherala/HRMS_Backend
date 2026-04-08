@@ -99,7 +99,7 @@ exports.createEmployee = async (req, res) => {
       },
     });
 
-    const link = `https://b0de-103-71-64-6.ngrok-free.app/activate/${token}`;
+    const link = `https://uneuphemistically-unupbraiding-elizabet.ngrok-free.dev/activate/${token}`;
 
     console.log("Activation Link:", link);
 

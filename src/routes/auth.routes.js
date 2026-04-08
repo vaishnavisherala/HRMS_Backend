@@ -8,7 +8,7 @@ const auth = require("../middleware/auth.middleware");
 router.post("/register-admin", ctrl.registerAdmin);
 router.post("/admin-login", ctrl.adminLogin);
 
-// Employee
+
 router.post("/employee-login", ctrl.employeeLogin);
 
 // Admin actions

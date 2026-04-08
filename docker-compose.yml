@@ -8,7 +8,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: pranav12345
+      POSTGRES_PASSWORD: Vaishnavi@766
       POSTGRES_DB: hrms
     ports:
       - "5432:5432"
@@ -30,7 +30,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgresql://postgres:pranav12345@db:5432/hrms
+      DATABASE_URL: postgresql://postgres:Vaishnavi%40766@db:5432/hrms
       JWT_SECRET: your_jwt_secret
       JWT_EXPIRES_IN: 1d
       CLIENT_URL: http://localhost:3000
@@ -42,7 +42,7 @@ services:
       db:
         condition: service_healthy
     command: >
-      sh -c "npx prisma migrate resolve --applied 20260402122232_init && npx prisma migrate deploy && node index.js"
+        sh -c "node index.js"
 volumes:
   postgres_data:
 
