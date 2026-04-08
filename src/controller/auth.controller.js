@@ -73,7 +73,7 @@ exports.adminLogin = async (req, res) => {
 // ✅ CREATE EMPLOYEE + SEND EMAIL
 exports.createEmployee = async (req, res) => {
   try {
-    const { name, email } = req.body;
+    const { l_name, f_name, m_name, email, Gender } = req.body;
 
     const existing = await prisma.employee.findUnique({
       where: { email },
@@ -86,7 +86,7 @@ exports.createEmployee = async (req, res) => {
     }
 
     const emp = await prisma.employee.create({
-      data: { name, email },
+      data: { f_name, m_name,l_name, email, Gender},
     });
 
     const token = uuidv4();
@@ -123,6 +123,8 @@ exports.createEmployee = async (req, res) => {
 
 
 
+
+
 // ✅ ACTIVATE EMPLOYEE
 exports.activateEmployee = async (req, res) => {
   try {
@@ -147,8 +149,8 @@ exports.activateEmployee = async (req, res) => {
       where: { emp_id: record.emp_id },
       data: {
         password: hash,
-        is_verified: true,
-        status: "Active",
+        is_active: true,
+        
       },
     });
 
@@ -176,7 +178,7 @@ exports.employeeLogin = async (req, res) => {
     if (!emp)
       return res.status(404).json({ message: "Employee not found" });
 
-    if (!emp.is_verified)
+    if (!emp.is_active)
       return res.status(400).json({ message: "Account not activated" });
 
     const match = await bcrypt.compare(req.body.password, emp.password);
@@ -204,6 +206,58 @@ exports.employeeLogin = async (req, res) => {
   }
 };
 
+//update employee details can be implemented similarly to addEmployeeDetails, with an additional check to ensure the record exists before updating.
+
+// exports.updateEmployeeDetails = async (req, res) => {
+//   try {
+//     const emp_id = req.user.id; // from JWT
+
+//     const {
+//       dob,
+//       perm_addr,
+//       work_addr,
+//       comm_addr,
+//       aadhar_no,
+//       pan_card,
+//       phone_no_pri,
+//       phone_no_sec,
+//     } = req.body;
+
+//     // ❗ check if already exists (1:1 relation)
+//     const existing = await prisma.employeeDetails.findUnique({
+//       where: { emp_id },
+//     });
+
+//     if (!existing) {
+//       return res.status(404).json({
+//         message: "Employee details not found",
+//       });
+//     }
+
+//     const details = await prisma.employeeDetails.update({
+//       where: { emp_id },
+//       data: {
+//         dob: new Date(dob),
+//         perm_addr,
+//         work_addr,
+//         comm_addr,
+//         aadhar_no,
+//         pan_card,
+//         phone_no_pri,
+//         phone_no_sec,
+//       },
+//     });
+
+//     res.json({
+//       message: "Employee details updated successfully",
+//       details,
+//     });
+
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// };
+
 
 
 // ✅ GET EMPLOYEES (FIXED FORMAT)
@@ -212,11 +266,14 @@ exports.getEmployees = async (req, res) => {
     const employees = await prisma.employee.findMany({
       select: {
         emp_id: true,
-        name: true,
+        f_name: true,
+        m_name: true,
+        l_name: true,
         email: true,
-        status: true,
-        is_verified: true,
+        is_active: true,
+        Gender: true,
         createdAt: true,
+        details:true,
       },
     });
 
@@ -225,5 +282,128 @@ exports.getEmployees = async (req, res) => {
 
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+};
+
+
+
+// ✅ ADD EMPLOYEE DETAILS (ONLY LOGGED-IN EMPLOYEE)
+exports.addEmployeeDetails = async (req, res) => {
+  try {
+    const emp_id = req.user.id; // from JWT
+
+    const {
+      dob,
+      perm_addr,
+      work_addr,
+      comm_addr,
+      aadhar_no,
+      pan_card,
+      phone_no_pri,
+      phone_no_sec,
+    } = req.body;
+
+    // ❗ check if already exists (1:1 relation)
+    const existing = await prisma.employeeDetails.findUnique({
+      where: { emp_id },
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        message: "Details already exist. Use update API",
+      });
+    }
+
+    const details = await prisma.employeeDetails.create({
+      data: {
+        emp_id,
+        dob: new Date(dob),
+        perm_addr,
+        work_addr,
+        comm_addr,
+        aadhar_no,
+        pan_card,
+        phone_no_pri,
+        phone_no_sec,
+      },
+    });
+
+    res.json({
+      message: "Employee details added successfully",
+      details,
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//logout can be handled on client side by deleting the token. For server-side token invalidation, we would need to implement a token blacklist which is beyond the current scope.
+
+exports.logout = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+
+    if (!token) {
+      return res.status(400).json({ message: "No token provided" });
+    }
+
+    await prisma.blacklistedToken.create({
+      data: { token },
+    });
+
+    res.json({ message: "Logged out successfully" });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.verifyToken = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+
+    if (!token)
+      return res.status(401).json({ message: "No token" });
+
+    // 🔥 CHECK BLACKLIST
+    const blacklisted = await prisma.blacklistedToken.findUnique({
+      where: { token },
+    });
+
+    if (blacklisted) {
+      return res.status(401).json({ message: "Token expired (logged out)" });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    req.user = decoded;
+
+    next();
+
+  } catch (err) {
+    res.status(401).json({ message: "Invalid token" });
   }
 };
