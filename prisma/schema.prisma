@@ -18,8 +18,8 @@ model Admin {
 model Employee {
   emp_id    Int      @id @default(autoincrement())
   f_name String   @default("Unknown")
-m_name String   @default("Unknown")
-l_name String   @default("Unknown")
+  m_name String   @default("Unknown")
+  l_name String   @default("Unknown")
 
   email     String   @unique
   password  String?
@@ -30,6 +30,8 @@ l_name String   @default("Unknown")
 
   details          EmployeeDetails?  @relation("EmployeeToDetails") // ✅ FIX HERE
   activationTokens ActivationToken[]
+  
+  attendance Attendance[]
 }
 
 model EmployeeDetails {
@@ -66,6 +68,22 @@ model ActivationToken {
 }
 
 
+model Attendance {
+  id        Int      @id @default(autoincrement())
+  emp_id    Int
+  employee  Employee @relation(fields: [emp_id], references: [emp_id])
+
+  date      DateTime
+  check_in  DateTime?
+  check_out DateTime?
+
+  status    String   @default("Present") // Present / Absent / Half-day
+  reason String?
+  createdAt DateTime @default(now())
+  
+  @@unique([emp_id, date]) // 
+}
+
 
 
 // Logout
@@ -75,3 +93,4 @@ model BlacklistedToken {
   token  String @unique
   createdAt DateTime @default(now())
 }
+
