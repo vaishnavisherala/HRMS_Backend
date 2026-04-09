@@ -4,8 +4,14 @@ const express = require("express");
 const cors=require('cors');
 const app = express();
 
-app.use(cors()); // ✅ VERY IMPORTANT
 
+// ✅ ADD THIS — must be BEFORE all routes
+app.use(cors({
+  origin: 'http://localhost:8080',  // your Vue app URL
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}))
 
 app.use(express.json());
 
@@ -53,7 +59,9 @@ app.get("/activate/:token", (req, res) => {
 });
 
 app.use("/api/auth", require("./src/routes/auth.routes"));
-
+app.use("/api/admin", require("./src/routes/admin.routes"));
+app.use("/api/employee", require("./src/routes/employee.routes"));
+app.use("/api/attendance", require("./src/routes/attendance.routes"));
 
 app.listen(3000, () => {
   console.log("Server running on port 3000");
