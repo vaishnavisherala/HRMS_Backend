@@ -1,0 +1,143 @@
+const axios             = require("axios");
+const { getAdminToken } = require("../config/keycloak");
+const prisma            = require("../config/db");
+
+// ─────────────────────────────────────────
+// POST /api/users/create-employee  (admin only)
+// ─────────────────────────────────────────
+exports.createEmployee = async (req, res) => {
+  try {
+    const {
+      firstName, lastName, email, phone,
+      gender,           // CHANGED: was stored as plain string, now stored as genderLkpId
+      dateOfJoining,
+      temporaryPassword,
+      // NEW Phase 1 fields (all optional)
+      departmentId, designationId, payGradeId,
+      officeLocationId, reportingManagerId,
+      genderLkpId, employmentTypeLkpId,
+    } = req.body;
+
+    if (!firstName || !lastName || !email) {
+      return res.status(400).json({ error: "firstName, lastName and email are required" });
+    }
+
+    const token        = await getAdminToken();
+    const KEYCLOAK_URL = process.env.KEYCLOAK_URL;
+    const REALM        = process.env.KEYCLOAK_REALM;
+    const tempPass     = temporaryPassword || "Welcome@123";
+
+    // Steps 1–4: Keycloak — UNCHANGED from your existing code
+    await axios.post(
+      `${KEYCLOAK_URL}/admin/realms/${REALM}/users`,
+      { username: email, email, firstName, lastName, enabled: true, emailVerified: true, requiredActions: [] },
+      { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
+    );
+
+    const usersRes   = await axios.get(
+      `${KEYCLOAK_URL}/admin/realms/${REALM}/users?email=${encodeURIComponent(email)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const keycloakId = usersRes.data[0]?.id;
+    if (!keycloakId) throw new Error("User not found after creation");
+
+    await axios.put(
+      `${KEYCLOAK_URL}/admin/realms/${REALM}/users/${keycloakId}/reset-password`,
+      { type: "password", value: tempPass, temporary: true },
+      { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
+    );
+
+    const roleRes = await axios.get(
+      `${KEYCLOAK_URL}/admin/realms/${REALM}/roles/employee`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    await axios.post(
+      `${KEYCLOAK_URL}/admin/realms/${REALM}/users/${keycloakId}/role-mappings/realm`,
+      [roleRes.data],
+      { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
+    );
+
+    // ── CHANGED: was prisma.employee.create with flat fields
+    //            now: create User first, then Employee with full Phase 1 fields
+    const employeeRole = await prisma.role.findUnique({ where: { name: "employee" } });
+    if (!employeeRole) return res.status(500).json({ error: "Employee role not found. Run: node prisma/seed.js" });
+
+    const user = await prisma.user.create({
+      data: { keycloakId, email, roleId: employeeRole.id, isActive: true },
+    });
+
+    const count        = await prisma.employee.count();
+    const employeeCode = `EMP-${String(count + 1).padStart(4, "0")}`;
+
+    const employee = await prisma.employee.create({
+      data: {
+        employeeCode,
+        userId:              user.id,
+        firstName,
+        lastName,
+        workEmail:           email,
+        phonePrimary:        phone            || null,
+        dateOfJoining:       dateOfJoining    ? new Date(dateOfJoining) : new Date(),
+        // NEW Phase 1 org fields
+        departmentId:        departmentId     || null,
+        designationId:       designationId    || null,
+        payGradeId:          payGradeId       || null,
+        officeLocationId:    officeLocationId || null,
+        reportingManagerId:  reportingManagerId || null,
+        genderLkpId:         genderLkpId      || null,
+        employmentTypeLkpId: employmentTypeLkpId || null,
+      },
+      include: {
+        department:    { select: { name: true } },
+        designation:   { select: { name: true } },
+        officeLocation: { select: { name: true } },
+      },
+    });
+    // ── END CHANGE ──────────────────────────────────────────────────────────
+
+    return res.status(201).json({
+      message:  "Employee created successfully",
+      employee,
+      note:     "Employee must change password via POST /api/auth/change-password",
+    });
+
+  } catch (err) {
+    console.error("createEmployee error:", err.response?.data || err.message);
+    if (err.response?.status === 409) return res.status(409).json({ error: "Employee with this email already exists" });
+    return res.status(500).json({ error: err.response?.data || err.message });
+  }
+};
+
+// ─────────────────────────────────────────
+// GET /api/users/employees  (admin only)
+// ─────────────────────────────────────────
+exports.getAllEmployees = async (req, res) => {
+  try {
+    // ── CHANGED: added Phase 1 relations in select, filter deletedAt
+    const employees = await prisma.employee.findMany({
+      where:   { deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id:           true,
+        employeeCode: true,
+        firstName:    true,
+        lastName:     true,
+        workEmail:    true,
+        isActive:     true,
+        createdAt:    true,
+        department:   { select: { name: true } },
+        designation:  { select: { name: true } },
+        payGrade:     { select: { code: true } },
+        officeLocation: { select: { name: true } },
+        user:         { select: { role: { select: { name: true } } } },
+      },
+    });
+    // ── END CHANGE ──────────────────────────────────────────────────────────
+
+    return res.status(200).json({ employees });
+
+  } catch (err) {
+    console.error("getAllEmployees error:", err.message);
+    return res.status(500).json({ error: "Failed to fetch employees" });
+  }
+};
