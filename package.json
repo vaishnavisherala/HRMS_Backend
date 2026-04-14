@@ -1,4 +1,12 @@
 {
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "db:migrate": "npx prisma migrate dev --name phase1_foundation",
+    "db:generate": "npx prisma generate",
+    "db:seed": "node prisma/seed.js",
+    "db:studio": "npx prisma studio"
+  },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "axios": "^1.15.0",
@@ -8,6 +16,10 @@
     "jwks-rsa": "^4.0.1"
   },
   "devDependencies": {
+    "nodemon": "^3.0.2",
     "prisma": "^5.22.0"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   }
 }
