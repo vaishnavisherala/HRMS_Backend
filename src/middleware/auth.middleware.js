@@ -45,4 +45,21 @@ function requireRole(role) {
   };
 }
 
-module.exports = { authenticate, requireRole };
+const isAdmin = requireRole('admin');
+
+function isSelfOrAdmin(req, res, next) {
+  const roles = req.user?.realm_access?.roles || [];
+  if (roles.includes('admin')) return next();
+
+  const prisma = require('../config/db');
+  prisma.employee.findFirst({
+    where: { employeeCode: req.params.employeeCode, user: { keycloakId: req.user.sub } },
+  })
+  .then(emp => {
+    if (!emp) return res.status(403).json({ error: 'Access denied' });
+    next();
+  })
+  .catch(() => res.status(500).json({ error: 'Auth check failed' }));
+}
+
+module.exports = { authenticate, requireRole,isAdmin, isSelfOrAdmin };
