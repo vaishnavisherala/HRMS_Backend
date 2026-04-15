@@ -141,7 +141,7 @@ model RolePermission {
 }
 
 model User {
-  id              String    @id @default(uuid())
+  id              Int    @id @default(autoincrement())
   keycloakId      String    @unique   // Keycloak UUID — critical link between both systems
   email           String    @unique
   roleId          Int
@@ -161,7 +161,7 @@ model User {
 
 model LoginHistory {
   id         Int      @id @default(autoincrement())
-  userId     String
+  userId     Int
   eventType  String             // LOGIN | LOGOUT | FAILED | LOCKED | PASSWORD_RESET
   ipAddress  String?
   userAgent  String?
@@ -182,7 +182,7 @@ model Department {
   code             String  @unique   // ENG, HR, FIN, OPS, SALES
   name             String
   parentId         Int?              // NULL for root. Self-ref enables unlimited depth
-  headEmployeeId   String?           // FK to Employee — set AFTER employees are created
+  headEmployeeId   Int?           // FK to Employee — set AFTER employees are created
   costCenter       String?
   isActive         Boolean @default(true)
   createdAt        DateTime @default(now())
@@ -252,9 +252,9 @@ model PayGrade {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Employee {
-  id                   String    @id @default(uuid())
+  id                    Int      @id @default(autoincrement())
   employeeCode         String    @unique     // EMP-0001, EMP-0002 …
-  userId               String    @unique     // One-to-one with User
+  userId               Int    @unique     // One-to-one with User
   firstName            String
   lastName             String
   preferredName        String?
@@ -264,7 +264,7 @@ model Employee {
   dateOfBirth          DateTime?
   probationEndDate     DateTime?
   lastWorkingDate      DateTime?
-  reportingManagerId   String?               // Self-ref FK — builds org tree
+  reportingManagerId   Int?               // Self-ref FK — builds org tree
   departmentId         Int?
   designationId        Int?
   payGradeId           Int?
@@ -318,7 +318,7 @@ model Employee {
 
 model EmployeePersonalDetail {
   id                    Int      @id @default(autoincrement())
-  employeeId            String   @unique   // One row per employee
+  employeeId            Int   @unique   // One row per employee
   maritalStatusLkpId    Int?
   bloodGroupLkpId       Int?
   emergencyContactName  String?
@@ -337,7 +337,7 @@ model EmployeePersonalDetail {
 
 model EmployeeAddressDetail {
   id               Int      @id @default(autoincrement())
-  employeeId       String
+  employeeId       Int
   addressTypeLkpId Int                // FK to LkpValue (ADDRESS_TYPE: Current/Permanent/Temporary)
   line1            String
   line2            String?
@@ -359,7 +359,7 @@ model EmployeeAddressDetail {
 
 model EmployeePreviousEmployment {
   id              Int      @id @default(autoincrement())
-  employeeId      String
+  employeeId      Int
   companyName     String
   designation     String?
   startDate       DateTime?
@@ -378,7 +378,7 @@ model EmployeePreviousEmployment {
 
 model EmployeeEducation {
   id           Int      @id @default(autoincrement())
-  employeeId   String
+  employeeId   Int
   degree       String             // B.Tech, MBA, PhD …
   institution  String
   fieldOfStudy String?
@@ -396,7 +396,7 @@ model EmployeeEducation {
 
 model EmployeeIdentityDetail {
   id                 Int      @id @default(autoincrement())
-  employeeId         String
+  employeeId         Int
   identityTypeLkpId  Int               // FK to LkpValue (IDENTITY_TYPE: PAN/Aadhaar/Passport …)
   identityNumber     String            // ENCRYPTED at application layer before storing
   expiryDate         DateTime?
@@ -413,7 +413,7 @@ model EmployeeIdentityDetail {
 
 model EmployeeDocument {
   id              Int      @id @default(autoincrement())
-  employeeId      String
+  employeeId      Int
   docTypeLkpId    Int               // FK to LkpValue (DOC_TYPE: Offer Letter/Relieving …)
   fileName        String
   fileUrl         String            // Object storage URL (S3 / GCS)
@@ -455,7 +455,7 @@ model Shift {
 
 model EmployeeShift {
   id            Int      @id @default(autoincrement())
-  employeeId    String
+  employeeId    Int
   shiftId       Int
   effectiveFrom DateTime
   effectiveTo   DateTime?   // NULL = currently active shift
@@ -469,7 +469,7 @@ model EmployeeShift {
 
 model AttendanceLog {
   id               Int      @id @default(autoincrement())
-  employeeId       String
+  employeeId       Int
   logDate          DateTime @db.Date
   punchTime        DateTime
   punchType        String             // CHECK_IN | CHECK_OUT | BREAK_IN | BREAK_OUT
@@ -495,7 +495,7 @@ model AttendanceLog {
 
 model AttendanceSummary {
   id               Int      @id @default(autoincrement())
-  employeeId       String
+  employeeId       Int
   attendanceDate   DateTime @db.Date        // One row per employee per day
   shiftId          Int?
   firstCheckIn     DateTime?

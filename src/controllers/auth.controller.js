@@ -5,6 +5,12 @@ const { getAdminToken } = require("../config/keycloak");
 // POST /api/auth/login
 // Works for both admin and employee
 // ─────────────────────────────────────────
+
+// const prisma = require("../config/prisma"); // adjust path if needed
+
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
 exports.login = async (req, res) => {
   const { email, password } = req.body;
 
@@ -13,13 +19,14 @@ exports.login = async (req, res) => {
   }
 
   try {
+    // 🔐 Step 1: Authenticate with Keycloak
     const response = await axios.post(
       `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`,
       new URLSearchParams({
-        grant_type:    "password",
-        client_id:     process.env.KEYCLOAK_CLIENT_ID,
+        grant_type: "password",
+        client_id: process.env.KEYCLOAK_CLIENT_ID,
         client_secret: process.env.KEYCLOAK_CLIENT_SECRET,
-        username:      email,
+        username: email,
         password,
       }),
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
@@ -27,6 +34,30 @@ exports.login = async (req, res) => {
 
     const { access_token, refresh_token, expires_in } = response.data;
 
+    // 🔍 Step 2: Find user in your DB
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    // 🧾 Step 3: Insert login history
+    if (user) {
+      await prisma.loginHistory.create({
+        data: {
+          userId: user.id,
+          eventType: "LOGIN",
+          ipAddress: req.ip,
+          userAgent: req.headers["user-agent"]
+        }
+      });
+
+      // Optional: update last login
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() }
+      });
+    }
+
+    // ✅ Step 4: Return response
     return res.status(200).json({
       message: "Login successful",
       access_token,
@@ -37,12 +68,27 @@ exports.login = async (req, res) => {
   } catch (err) {
     const errData = err.response?.data;
 
-    // Employee trying to login with temporary password
+    // ❌ FAILED LOGIN LOGGING
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (user) {
+      await prisma.loginHistory.create({
+        data: {
+          userId: user.id,
+          eventType: "FAILED",
+          ipAddress: req.ip,
+          userAgent: req.headers["user-agent"]
+        }
+      });
+    }
+
     if (errData?.error_description === "Account is not fully set up") {
       return res.status(403).json({
-        error:  "Password change required",
+        error: "Password change required",
         action: "Employee must change temporary password",
-        hint:   "Call POST /api/auth/change-password with email and newPassword",
+        hint: "Call POST /api/auth/change-password"
       });
     }
 
