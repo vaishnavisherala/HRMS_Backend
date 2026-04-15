@@ -1,12 +1,19 @@
 // routes/profile.routes.js
 const router = require('express').Router();
-const ctrl   = require('../controllers/profile.controller');
-const { authenticate, isAdmin } = require('../middleware/auth');
+const { authenticate, isAdmin, isSelfOrAdmin } = require('../middleware/auth.middleware');
+// ✅ import controller correctly
+const {
+  getPersonalDetails,
+  upsertPersonalBasic,
+  upsertAddress,
+  upsertIdentity,
+  verifyIdentity
+} = require("../controllers/profile.controller");
 
-router.get ('/:employeeId/personal',               authenticate,           ctrl.getPersonalDetails);
-router.put ('/:employeeId/personal/basic',         authenticate,           ctrl.upsertPersonalBasic);
-router.put ('/:employeeId/address',                authenticate,           ctrl.upsertAddress);
-router.put ('/:employeeId/identity',               authenticate,           ctrl.upsertIdentity);
-router.put ('/:employeeId/identity/:id/verify',    authenticate, isAdmin,  ctrl.verifyIdentity);
+router.get ('/:employeeCode/personal',               authenticate,    isSelfOrAdmin,       getPersonalDetails);
+router.put ('/:employeeCode/personal/basic',         authenticate,     isSelfOrAdmin,    upsertPersonalBasic);
+router.put ('/:employeeCode/address',                authenticate,     isSelfOrAdmin,      upsertAddress);
+router.put ('/:employeeCode/identity',               authenticate,      isSelfOrAdmin,    upsertIdentity);
+router.put ('/:employeeCode/identity/:id/verify',    authenticate, isAdmin,  verifyIdentity);
 
 module.exports = router;

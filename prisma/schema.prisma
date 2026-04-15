@@ -1,11 +1,8 @@
-<<<<<<< HEAD
-=======
 // HRMS Phase 1 - Complete Prisma Schema
 // Two Elephants Technologies LLP | v1.0 | April 2026
 // Modules: Lookup & Reference | Auth & System | Organisation Masters
 //          Employee Core & Profile | Attendance Management
 
->>>>>>> 9a9df7344c4b4cf24134f806205e5bdea330c14d
 generator client {
   provider = "prisma-client-js"
 }
@@ -15,29 +12,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-<<<<<<< HEAD
-model Admin {
-  id         Int     @id @default(autoincrement())
-  keycloakId String  @unique
-  firstName  String
-  lastName   String
-  email      String  @unique
-  phone      String?
-}
-
-model Employee {
-  id                Int      @id @default(autoincrement())
-  keycloakId        String   @unique
-  firstName         String
-  lastName          String
-  email             String   @unique
-  phone             String?
-  gender            String?
-  dateOfJoining     DateTime?
-  role              String   @default("employee")
-  temporaryPassword String?
-}
-=======
 // ─────────────────────────────────────────────────────────────────────────────
 // MODULE 1 — LOOKUP & REFERENCE (5 Tables)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -542,4 +516,3 @@ model AttendanceSummary {
   @@index([attendanceDate])
   @@map("attendance_summaries")
 }
->>>>>>> 9a9df7344c4b4cf24134f806205e5bdea330c14d
