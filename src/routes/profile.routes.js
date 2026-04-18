@@ -7,7 +7,10 @@ const {
   upsertPersonalBasic,
   upsertAddress,
   upsertIdentity,
-  verifyIdentity
+  verifyIdentity,
+  addPreviousEmployment,
+  addEducation,
+  addDocument
 } = require("../controllers/profile.controller");
 
 router.get ('/:employeeCode/personal',               authenticate,    isSelfOrAdmin,       getPersonalDetails);
@@ -16,4 +19,8 @@ router.put ('/:employeeCode/address',                authenticate,     isSelfOrA
 router.put ('/:employeeCode/identity',               authenticate,      isSelfOrAdmin,    upsertIdentity);
 router.put ('/:employeeCode/identity/:id/verify',    authenticate, isAdmin,  verifyIdentity);
 
+
+router.put('/:employeeCode/previous-employment', authenticate, isSelfOrAdmin, addPreviousEmployment);
+router.put('/:employeeCode/education', authenticate, isSelfOrAdmin, addEducation);
+router.put('/:employeeCode/document', authenticate, isSelfOrAdmin, addDocument);
 module.exports = router;

@@ -8,8 +8,8 @@ const prisma            = require("../config/db");
 exports.createEmployee = async (req, res) => {
   try {
     const {
-      firstName, lastName, email, phone,
-      gender,           // CHANGED: was stored as plain string, now stored as genderLkpId
+      firstName,middlename, lastName, email, phone,
+                // CHANGED: was stored as plain string, now stored as genderLkpId
       dateOfJoining,
       temporaryPassword,
       // NEW Phase 1 fields (all optional)
@@ -30,7 +30,9 @@ exports.createEmployee = async (req, res) => {
     // Steps 1–4: Keycloak — UNCHANGED from your existing code
     await axios.post(
       `${KEYCLOAK_URL}/admin/realms/${REALM}/users`,
-      { username: email, email, firstName, lastName, enabled: true, emailVerified: true, requiredActions: [] },
+      { username: email, email, firstName, lastName, enabled: true, emailVerified: true, requiredActions: [], attributes: {
+      middlename: middlename ? [middlename] : []
+    } },
       { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
     );
 
@@ -61,7 +63,6 @@ exports.createEmployee = async (req, res) => {
     //            now: create User first, then Employee with full Phase 1 fields
     const employeeRole = await prisma.role.findUnique({ where: { name: "employee" } });
     if (!employeeRole) return res.status(500).json({ error: "Employee role not found. Run: node prisma/seed.js" });
-
     const user = await prisma.user.create({
       data: { keycloakId, email, roleId: employeeRole.id, isActive: true },
     });
@@ -74,6 +75,7 @@ exports.createEmployee = async (req, res) => {
         employeeCode,
         userId:              user.id,
         firstName,
+        middlename,
         lastName,
         workEmail:           email,
         phonePrimary:        phone            || null,
