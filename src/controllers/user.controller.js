@@ -8,8 +8,8 @@ const prisma            = require("../config/db");
 exports.createEmployee = async (req, res) => {
   try {
     const {
-      firstName, lastName, email, phone,
-      gender,           // CHANGED: was stored as plain string, now stored as genderLkpId
+      firstName,middlename, lastName, email, phone,
+                // CHANGED: was stored as plain string, now stored as genderLkpId
       dateOfJoining,
       temporaryPassword,
       // NEW Phase 1 fields (all optional)
@@ -30,7 +30,9 @@ exports.createEmployee = async (req, res) => {
     // Steps 1–4: Keycloak — UNCHANGED from your existing code
     await axios.post(
       `${KEYCLOAK_URL}/admin/realms/${REALM}/users`,
-      { username: email, email, firstName, lastName, enabled: true, emailVerified: true, requiredActions: [] },
+      { username: email, email, firstName, lastName, enabled: true, emailVerified: true, requiredActions: [], attributes: {
+      middlename: middlename ? [middlename] : []
+    } },
       { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
     );
 
@@ -61,7 +63,6 @@ exports.createEmployee = async (req, res) => {
     //            now: create User first, then Employee with full Phase 1 fields
     const employeeRole = await prisma.role.findUnique({ where: { name: "employee" } });
     if (!employeeRole) return res.status(500).json({ error: "Employee role not found. Run: node prisma/seed.js" });
-
     const user = await prisma.user.create({
       data: { keycloakId, email, roleId: employeeRole.id, isActive: true },
     });
@@ -74,6 +75,7 @@ exports.createEmployee = async (req, res) => {
         employeeCode,
         userId:              user.id,
         firstName,
+        middlename,
         lastName,
         workEmail:           email,
         phonePrimary:        phone            || null,
@@ -139,5 +141,44 @@ exports.getAllEmployees = async (req, res) => {
   } catch (err) {
     console.error("getAllEmployees error:", err.message);
     return res.status(500).json({ error: "Failed to fetch employees" });
+  }
+};
+
+exports.getCurrentUser = async (req, res) => {
+  try {
+    const keycloakId = req.user?.sub;
+    if (!keycloakId) {
+      return res.status(401).json({ error: "Invalid token payload" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { keycloakId },
+      select: {
+        id: true,
+        email: true,
+        role: { select: { name: true } },
+        employee: {
+          select: {
+            id: true,
+            employeeCode: true,
+            firstName: true,
+            lastName: true,
+            workEmail: true,
+            phonePrimary: true,
+            department: { select: { name: true } },
+            designation: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    return res.json({ user });
+  } catch (err) {
+    console.error("getCurrentUser error:", err.message);
+    return res.status(500).json({ error: "Failed to fetch current user" });
   }
 };

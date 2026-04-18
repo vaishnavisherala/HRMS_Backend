@@ -151,8 +151,7 @@ model User {
   deletedAt       DateTime?           // Soft delete — filter WHERE deletedAt IS NULL
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-
-  role         Role          @relation(fields: [roleId], references: [id])
+  role            Role          @relation(fields: [roleId], references: [id])
   employee     Employee?
   loginHistory LoginHistory[]
 
@@ -256,12 +255,12 @@ model Employee {
   employeeCode         String    @unique     // EMP-0001, EMP-0002 …
   userId               Int    @unique     // One-to-one with User
   firstName            String
+  middlename           String
   lastName             String
   preferredName        String?
   workEmail            String    @unique
   phonePrimary         String?
   dateOfJoining        DateTime
-  dateOfBirth          DateTime?
   probationEndDate     DateTime?
   lastWorkingDate      DateTime?
   reportingManagerId   Int?               // Self-ref FK — builds org tree
@@ -318,9 +317,11 @@ model Employee {
 
 model EmployeePersonalDetail {
   id                    Int      @id @default(autoincrement())
-  employeeId            Int   @unique   // One row per employee
+  employeeId            Int   @unique
   maritalStatusLkpId    Int?
+  dateOfBirth           DateTime?
   bloodGroupLkpId       Int?
+  profilePhotoUrl       String?   // ✅ ADD THIS
   emergencyContactName  String?
   emergencyContactPhone String?
   emergencyRelation     String?
@@ -388,9 +389,7 @@ model EmployeeEducation {
   isHighest    Boolean  @default(false)  // Flag for highest qualification
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-
   employee Employee @relation(fields: [employeeId], references: [id])
-
   @@map("employee_educations")
 }
 
@@ -419,6 +418,7 @@ model EmployeeDocument {
   fileUrl         String            // Object storage URL (S3 / GCS)
   fileSizeBytes   Int?
   mimeType        String?
+  description     String? 
   uploadedBy      String?           // Admin userId who uploaded
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())

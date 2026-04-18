@@ -8,14 +8,14 @@ const prisma            = require("../config/db");
 // Password is permanent — no temp logic
 // ─────────────────────────────────────────
 exports.registerAdmin = async (req, res) => {
-  const { firstName, lastName, email, password, phone } = req.body;
+  const { firstName, middlename, lastName, email, password, phone } = req.body;
 
   if (!firstName || !lastName || !email || !password) {
     return res.status(400).json({
       error: "firstName, lastName, email and password are required",
     });
   }
-
+  
   try {
     const token        = await getAdminToken();
     const KEYCLOAK_URL = process.env.KEYCLOAK_URL;
@@ -65,7 +65,7 @@ exports.registerAdmin = async (req, res) => {
     const count        = await prisma.employee.count();
     const employeeCode = `EMP-${String(count + 1).padStart(4, "0")}`;
     const employee     = await prisma.employee.create({
-      data: { employeeCode, userId: user.id, firstName, lastName, workEmail: email, phonePrimary: phone || null, dateOfJoining: new Date() },
+      data: { employeeCode, userId: user.id, firstName, middlename, lastName, workEmail: email, phonePrimary: phone || null, dateOfJoining: new Date() },
     });
     // ── END CHANGE ──────────────────────────────────────────────────────────
 
