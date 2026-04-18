@@ -35,6 +35,29 @@ function isWithinGeofence(punchLat, punchLng, officeLat, officeLng, radiusM) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// HELPER — Attendance time-window check
+// Employees can only mark attendance between 08:00 and 21:00 (8 AM – 9 PM)
+// Returns { allowed: bool, message: string }
+// ─────────────────────────────────────────────────────────────────────────────
+function isWithinAttendanceWindow(now = new Date()) {
+  const hours   = now.getHours();   // 0–23 in server local time
+  const minutes = now.getMinutes();
+ 
+  // Window: 08:00 (inclusive) to 21:00 (inclusive, i.e. 21:00:59 is last valid minute)
+  const afterStart  = hours > 8  || (hours === 8  && minutes >= 0);
+  const beforeEnd   = hours < 21 || (hours === 21 && minutes === 0);
+ 
+  if (afterStart && beforeEnd) {
+    return { allowed: true };
+  }
+ 
+  return {
+    allowed: false,
+    message: "Attendance can only be marked between 08:00 AM and 09:00 PM.",
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/attendance/punch
 // Employee records a check-in or check-out event
 // Body: { employeeCode, punchType, latitude, longitude, source, deviceInfo }
@@ -431,4 +454,5 @@ module.exports = {
   getAttendanceSummary,
   regularizePunch,
   isWithinGeofence,
+  isWithinAttendanceWindow
 };
