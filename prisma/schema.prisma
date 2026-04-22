@@ -146,6 +146,8 @@ model User {
   email           String    @unique
   roleId          Int
   isActive        Boolean   @default(true)
+  isFirstLogin Boolean @default(true)
+  
   isEmailVerified Boolean   @default(false)
   lastLoginAt     DateTime?
   deletedAt       DateTime?           // Soft delete — filter WHERE deletedAt IS NULL
@@ -154,6 +156,7 @@ model User {
   role            Role          @relation(fields: [roleId], references: [id])
   employee     Employee?
   loginHistory LoginHistory[]
+
 
   @@map("users")
 }

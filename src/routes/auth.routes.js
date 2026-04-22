@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const { authenticate, requireRole } = require("../middleware/auth.middleware");
-const { login, logout , changePassword} = require("../controllers/auth.controller");
+const { login, logout , changePassword,refreshToken} = require("../controllers/auth.controller");
 
 // POST /api/auth/login   → admin or employee login
 router.post("/login", login);
@@ -9,6 +9,8 @@ router.post("/login", login);
 router.post("/logout", authenticate, logout);
 
 router.post("/change-password",changePassword);
+
+router.post("/refresh", refreshToken);
 
 // GET /api/auth/dashboard → employee dashboard (protected)
 router.get(

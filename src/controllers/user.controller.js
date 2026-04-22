@@ -124,6 +124,7 @@ exports.getAllEmployees = async (req, res) => {
         employeeCode: true,
         firstName:    true,
         lastName:     true,
+        phonePrimary:true,
         workEmail:    true,
         isActive:     true,
         createdAt:    true,
@@ -165,6 +166,7 @@ exports.getCurrentUser = async (req, res) => {
             lastName: true,
             workEmail: true,
             phonePrimary: true,
+            phonePrimary: true,
             department: { select: { name: true } },
             designation: { select: { name: true } },
           },
@@ -180,5 +182,59 @@ exports.getCurrentUser = async (req, res) => {
   } catch (err) {
     console.error("getCurrentUser error:", err.message);
     return res.status(500).json({ error: "Failed to fetch current user" });
+  }
+};
+
+
+
+exports.deleteEmployee = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1. Find employee to get their keycloakId via user relation
+    const employee = await prisma.employee.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        user: { select: { keycloakId: true } }
+      }
+    });
+    if (!employee) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
+    const keycloakId = employee.user?.keycloakId;
+    // 2. Delete from Keycloak first
+    if (keycloakId) {
+      try {
+        const token = await getAdminToken();
+        const KEYCLOAK_URL = process.env.KEYCLOAK_URL;
+        const REALM = process.env.KEYCLOAK_REALM;
+
+        await axios.delete(
+          `${KEYCLOAK_URL}/admin/realms/${REALM}/users/${keycloakId}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      } catch (kcErr) {
+        console.error("Keycloak delete error:", kcErr.response?.data || kcErr.message);
+        // Continue with DB delete even if Keycloak fails
+      }
+    }
+
+    // 3. Hard delete Employee row
+    await prisma.employee.delete({
+      where: { id: parseInt(id) }
+    });
+
+    // 4. Hard delete User row
+    if (employee.userId) {
+      await prisma.user.delete({
+        where: { id: employee.userId }
+      });
+    }
+
+    return res.json({ message: "Employee deleted successfully from DB and Keycloak" });
+
+  } catch (err) {
+    console.error("deleteEmployee error:", err.message);
+    return res.status(500).json({ error: "Failed to delete employee" });
   }
 };

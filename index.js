@@ -1,7 +1,13 @@
 require("dotenv").config(); // ← MUST be absolute first line
 
 const express = require("express");
+const cors = require("cors"); 
 const app = express();
+
+app.use(cors({
+  origin: "http://localhost:8081", // your Vue frontend
+  credentials: true
+}));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

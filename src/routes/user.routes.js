@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const { authenticate, requireRole } = require("../middleware/auth.middleware");
-const { createEmployee , getAllEmployees } = require("../controllers/user.controller");
+const { createEmployee , getAllEmployees ,deleteEmployee} = require("../controllers/user.controller");
 
 // POST /api/users/create-employee
 // Protected — only admin can add employees
@@ -17,6 +17,14 @@ router.get(
   authenticate,
   requireRole("admin"),
   getAllEmployees
+);
+
+
+router.delete(
+  "/employees/:id",
+  authenticate,
+  requireRole("admin"),
+  deleteEmployee
 );
 
 module.exports = router;
