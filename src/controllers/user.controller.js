@@ -12,6 +12,7 @@ exports.createEmployee = async (req, res) => {
                 // CHANGED: was stored as plain string, now stored as genderLkpId
       dateOfJoining,
       temporaryPassword,
+
       // NEW Phase 1 fields (all optional)
       departmentId, designationId, payGradeId,
       officeLocationId, reportingManagerId,
@@ -123,6 +124,7 @@ exports.getAllEmployees = async (req, res) => {
         id:           true,
         employeeCode: true,
         firstName:    true,
+        middlename:    true,  
         lastName:     true,
         phonePrimary:true,
         workEmail:    true,
@@ -164,6 +166,7 @@ exports.getCurrentUser = async (req, res) => {
             employeeCode: true,
             firstName: true,
             lastName: true,
+            middlename: true,
             workEmail: true,
             phonePrimary: true,
             phonePrimary: true,
