@@ -16,7 +16,7 @@ exports.registerAdmin = async (req, res) => {
       error: "firstName, lastName, email and password are required",
     });
   }
-  
+
   try {
     const token        = await getAdminToken();
     const KEYCLOAK_URL = process.env.KEYCLOAK_URL;

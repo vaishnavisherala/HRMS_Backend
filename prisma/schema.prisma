@@ -146,6 +146,8 @@ model User {
   email           String    @unique
   roleId          Int
   isActive        Boolean   @default(true)
+  isFirstLogin Boolean @default(true)
+  
   isEmailVerified Boolean   @default(false)
   isFirstLogin    Boolean   @default(true)  // Force password change on first login for employees
   lastLoginAt     DateTime?
@@ -155,6 +157,7 @@ model User {
   role            Role          @relation(fields: [roleId], references: [id])
   employee     Employee?
   loginHistory LoginHistory[]
+
 
   @@map("users")
 }

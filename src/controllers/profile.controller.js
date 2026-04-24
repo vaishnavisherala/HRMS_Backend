@@ -22,7 +22,7 @@ exports.getPersonalDetails = async (req, res) => {
       where: { id: emp.id },
       select: {
         id: true, employeeCode: true,
-        firstName: true, lastName: true,
+        firstName: true, middlename:true, lastName: true,
         phonePrimary: true,
         personalDetail: {
           select: {
