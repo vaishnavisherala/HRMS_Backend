@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 const { Pool } = require("pg");
 
 const pool = new Pool({
@@ -9,3 +10,8 @@ const pool = new Pool({
 });
 
 module.exports = pool;
+=======
+const { PrismaClient } = require("@prisma/client");
+const prisma = new PrismaClient();
+module.exports = prisma;
+>>>>>>> b4fb8b0bec2fd78eef6cc334bde511aa71d462c2
