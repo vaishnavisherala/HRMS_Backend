@@ -8,8 +8,7 @@ const { getAdminToken } = require("../config/keycloak");
 
 // const prisma = require("../config/prisma"); // adjust path if needed
 
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../config/db')
 
 exports.login = async (req, res) => {
   const { email, password } = req.body;
@@ -36,26 +35,38 @@ exports.login = async (req, res) => {
 
     // 🔍 Step 2: Find user in your DB
     const user = await prisma.user.findUnique({
-      where: { email }
+      where: { email },
+      include: { role: true } // ✅ Get role relation
     });
 
-    // 🧾 Step 3: Insert login history
-    if (user) {
-      await prisma.loginHistory.create({
-        data: {
-          userId: user.id,
-          eventType: "LOGIN",
-          ipAddress: req.ip,
-          userAgent: req.headers["user-agent"]
-        }
-      });
-
-      // Optional: update last login
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { lastLoginAt: new Date() }
+    // ❌ User not in DB - return error
+    if (!user) {
+      return res.status(403).json({ 
+        error: "User not registered in system",
+        hint: "Contact admin to add this user"
       });
     }
+
+    // 🧾 Step 3: Insert login history
+    await prisma.loginHistory.create({
+      data: {
+        userId: user.id,
+        eventType: "LOGIN",
+        ipAddress: req.ip,
+        userAgent: req.headers["user-agent"]
+      }
+    });
+
+    // Optional: update last login
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() }
+    });
+
+    const employee = await prisma.employee.findFirst({
+      where: { userId: user.id, deletedAt: null },
+      select: { employeeCode: true }
+    });
 
     // ✅ Step 4: Return response
     return res.status(200).json({
@@ -63,14 +74,23 @@ exports.login = async (req, res) => {
       access_token,
       refresh_token,
       expires_in,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role?.name?.toLowerCase() || "employee",
+        isFirstLogin: user.isFirstLogin,
+        employeeCode: employee?.employeeCode || null
+      }
     });
-
   } catch (err) {
     const errData = err.response?.data;
 
     // ❌ FAILED LOGIN LOGGING
     const user = await prisma.user.findUnique({
-      where: { email }
+      where: { email },
+      include: {
+    role: true   // 👈 IMPORTANT (relation)
+  }
     });
 
     if (user) {
@@ -88,8 +108,23 @@ exports.login = async (req, res) => {
       return res.status(403).json({
         error: "Password change required",
         action: "Employee must change temporary password",
-        hint: "Call POST /api/auth/change-password"
       });
+    }
+
+    // Handle Keycloak temporary password requirement
+    if (errData?.error_description?.includes("temporary") || errData?.error === "invalid_grant") {
+      // Try to check if user exists to give better error message
+      const tempUser = await prisma.user.findUnique({
+        where: { email },
+        include: { role: true }
+      });
+      
+      if (tempUser && tempUser.isFirstLogin) {
+        return res.status(403).json({
+          error: "Password change required",
+          action: "Employee must change temporary password"
+        });
+      }
     }
 
     if (err.response?.status === 401) {
@@ -143,7 +178,6 @@ exports.changePassword = async (req, res) => {
       error: "email and newPassword are required",
     });
   }
-
   try {
     const token = await getAdminToken();
 
@@ -176,6 +210,25 @@ exports.changePassword = async (req, res) => {
         },
       }
     );
+    
+
+    // Step 3 — Clear required actions so login is no longer blocked
+    await axios.put(
+      `${KEYCLOAK_URL}/admin/realms/${REALM}/users/${userId}`,
+      { requiredActions: [] },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    // Step 4 — Update database to mark first login complete
+    await prisma.user.update({
+      where: { email },
+      data: { isFirstLogin: false }
+    });
 
     return res.status(200).json({
       message: "Password changed successfully. You can now login with your new password.",

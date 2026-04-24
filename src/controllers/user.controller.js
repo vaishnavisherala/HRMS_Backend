@@ -8,7 +8,7 @@ const prisma            = require("../config/db");
 exports.createEmployee = async (req, res) => {
   try {
     const {
-      firstName,middlename, lastName, email, phone,
+      firstName, middleName, lastName, email, phone,
                 // CHANGED: was stored as plain string, now stored as genderLkpId
       dateOfJoining,
       temporaryPassword,
@@ -22,6 +22,17 @@ exports.createEmployee = async (req, res) => {
       return res.status(400).json({ error: "firstName, lastName and email are required" });
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
+
+    // Validate phone format if provided
+    if (phone && !/^[\d\s\-\+\(\)]{7,}$/.test(phone)) {
+      return res.status(400).json({ error: "Invalid phone format" });
+    }
+
     const token        = await getAdminToken();
     const KEYCLOAK_URL = process.env.KEYCLOAK_URL;
     const REALM        = process.env.KEYCLOAK_REALM;
@@ -31,7 +42,7 @@ exports.createEmployee = async (req, res) => {
     await axios.post(
       `${KEYCLOAK_URL}/admin/realms/${REALM}/users`,
       { username: email, email, firstName, lastName, enabled: true, emailVerified: true, requiredActions: [], attributes: {
-      middlename: middlename ? [middlename] : []
+      middleName: middleName ? [middleName] : []
     } },
       { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
     );
@@ -75,7 +86,7 @@ exports.createEmployee = async (req, res) => {
         employeeCode,
         userId:              user.id,
         firstName,
-        middlename,
+        middleName,
         lastName,
         workEmail:           email,
         phonePrimary:        phone            || null,
@@ -93,6 +104,8 @@ exports.createEmployee = async (req, res) => {
         department:    { select: { name: true } },
         designation:   { select: { name: true } },
         officeLocation: { select: { name: true } },
+        genderLkp:     { select: { name: true } },
+        employmentTypeLkp: { select: { name: true } },
       },
     });
     // ── END CHANGE ──────────────────────────────────────────────────────────
@@ -123,14 +136,17 @@ exports.getAllEmployees = async (req, res) => {
         id:           true,
         employeeCode: true,
         firstName:    true,
+        middleName:   true,
         lastName:     true,
         workEmail:    true,
         isActive:     true,
         createdAt:    true,
         department:   { select: { name: true } },
         designation:  { select: { name: true } },
-        payGrade:     { select: { code: true } },
+        payGrade:     { select: { code: true, name: true } },
         officeLocation: { select: { name: true } },
+        genderLkp:    { select: { name: true } },
+        employmentTypeLkp: { select: { name: true } },
         user:         { select: { role: { select: { name: true } } } },
       },
     });
@@ -141,5 +157,25 @@ exports.getAllEmployees = async (req, res) => {
   } catch (err) {
     console.error("getAllEmployees error:", err.message);
     return res.status(500).json({ error: "Failed to fetch employees" });
+  }
+};
+
+
+
+exports.getMyProfile = async (req, res) => {
+  try {
+    const keycloakId = req.user.sub;
+    const user = await prisma.user.findUnique({
+      where: { keycloakId },
+      include: { employee: { select: { employeeCode: true, firstName: true, lastName: true } } }
+    });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    return res.json({
+      employeeCode: user.employee?.employeeCode || null,
+      firstName: user.employee?.firstName || null,
+      lastName: user.employee?.lastName || null
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 };

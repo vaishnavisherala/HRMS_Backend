@@ -7,10 +7,6 @@ const {
   getDepartments, getDesignations, getOfficeLocations, getPayGrades, getShifts,
 } = require("../controllers/lookup.controller");
 
-// Public — no auth (used by forms for dropdowns)
-router.get("/",       getAllCategories);
-router.get("/:code",  getLookupValues);
-
 // Geographic
 router.get("/geo/countries",                     getCountries);
 router.get("/geo/countries/:countryId/states",   getStatesByCountry);
@@ -22,5 +18,9 @@ router.get("/org/designations",     authenticate, requireRole("admin"), getDesig
 router.get("/org/office-locations", authenticate, requireRole("admin"), getOfficeLocations);
 router.get("/org/pay-grades",       authenticate, requireRole("admin"), getPayGrades);
 router.get("/org/shifts",           authenticate,                       getShifts);
+
+// Public — no auth (used by forms for dropdowns)
+router.get("/",       getAllCategories);
+router.get("/:code",  getLookupValues);
 
 module.exports = router;

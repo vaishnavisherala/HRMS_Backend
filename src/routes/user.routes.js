@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const { authenticate, requireRole } = require("../middleware/auth.middleware");
-const { createEmployee , getAllEmployees } = require("../controllers/user.controller");
+const { createEmployee , getAllEmployees,getMyProfile } = require("../controllers/user.controller");
 
 // POST /api/users/create-employee
 // Protected — only admin can add employees
@@ -18,5 +18,7 @@ router.get(
   requireRole("admin"),
   getAllEmployees
 );
+
+router.get('/me', authenticate, getMyProfile);
 
 module.exports = router;

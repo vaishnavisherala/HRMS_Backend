@@ -147,6 +147,7 @@ model User {
   roleId          Int
   isActive        Boolean   @default(true)
   isEmailVerified Boolean   @default(false)
+  isFirstLogin    Boolean   @default(true)  // Force password change on first login for employees
   lastLoginAt     DateTime?
   deletedAt       DateTime?           // Soft delete — filter WHERE deletedAt IS NULL
   createdAt       DateTime  @default(now())

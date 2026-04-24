@@ -12,7 +12,7 @@ const prisma            = require("../config/db");
 // ─────────────────────────────────────────────────────────────────────────────
 async function resolveEmployeeByCode(employeeCode) {
   const employee = await prisma.employee.findFirst({
-    where: { employeeCode, deletedAt: null, isActive: true },
+    where: { employeeCode, deletedAt: null },
   });
   return employee || null;
 }

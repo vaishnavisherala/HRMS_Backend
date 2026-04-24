@@ -1,7 +1,16 @@
 require("dotenv").config(); // ← MUST be absolute first line
 
 const express = require("express");
+const cors = require("cors");
 const app = express();
+
+// ✅ CORS Configuration for frontend connection
+app.use(cors({
+  origin: process.env.FRONTEND_URL || "http://localhost:8081",
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

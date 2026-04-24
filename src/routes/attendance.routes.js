@@ -1,5 +1,5 @@
 const router = require("express").Router();
-const { authenticate, requireRole } = require("../middleware/auth.middleware");
+const { authenticate, requireRole, isSelfOrAdmin } = require("../middleware/auth.middleware");
 const {
   recordPunch, assignShift,
   triggerComputeSummary,
@@ -13,7 +13,7 @@ router.post("/compute-summary",          authenticate, requireRole("admin"), tri
 router.put ("/regularize/:logId",        authenticate, requireRole("admin"), regularizePunch);
 
 // specific routes BEFORE param routes
-router.get ("/summary/:employeeCode",    authenticate, requireRole("admin"), getAttendanceSummary);
-router.get ("/:employeeCode",            authenticate, requireRole("admin"), getAttendanceLogs);
+router.get ("/summary/:employeeCode",    authenticate, isSelfOrAdmin, getAttendanceSummary);
+router.get ("/:employeeCode",            authenticate, isSelfOrAdmin, getAttendanceLogs);
 
 module.exports = router;
