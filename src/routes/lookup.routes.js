@@ -22,5 +22,5 @@ router.get("/org/designations",     authenticate, requireRole("admin"), getDesig
 router.get("/org/office-locations", authenticate, requireRole("admin"), getOfficeLocations);
 router.get("/org/pay-grades",       authenticate, requireRole("admin"), getPayGrades);
 router.get("/org/shifts",           authenticate,                       getShifts);
-
+router.get("/org/employment-types", authenticate, requireRole("admin"), getLookupValues);
 module.exports = router;

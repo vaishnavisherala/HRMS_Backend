@@ -5,7 +5,10 @@ const cors = require("cors");
 const app = express();
 
 app.use(cors({
-  origin: "http://localhost:8081", // your Vue frontend
+ origin: [
+    "http://localhost:8081",
+    "http://10.113.178.55:8081"
+  ],
   credentials: true
 }));
 

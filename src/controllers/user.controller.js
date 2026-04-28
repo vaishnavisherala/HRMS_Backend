@@ -43,7 +43,6 @@ exports.createEmployee = async (req, res) => {
     );
     const keycloakId = usersRes.data[0]?.id;
     if (!keycloakId) throw new Error("User not found after creation");
-
     await axios.put(
       `${KEYCLOAK_URL}/admin/realms/${REALM}/users/${keycloakId}/reset-password`,
       { type: "password", value: tempPass, temporary: true },
@@ -130,6 +129,14 @@ exports.getAllEmployees = async (req, res) => {
         workEmail:    true,
         isActive:     true,
         createdAt:    true,
+        employmentTypeLkpId: true,
+        employmentType: {           // ← your relation name
+          select: {
+            code:  true,              // FULL_TIME, PART_TIME, etc.
+            label: true ,
+            categoryId:true              // Full-Time, Part-Time, etc.
+          }
+        },
         department:   { select: { name: true } },
         designation:  { select: { name: true } },
         payGrade:     { select: { code: true } },
