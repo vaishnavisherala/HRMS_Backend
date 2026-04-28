@@ -1,24 +1,14 @@
 require("dotenv").config(); // ← MUST be absolute first line
 
 const express = require("express");
-<<<<<<< HEAD
-const cors = require("cors");
-const app = express();
 
-// ✅ CORS Configuration for frontend connection
-app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:8081",
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-=======
 const cors = require("cors"); 
 const app = express();
 
 app.use(cors({
   origin: "http://localhost:8081", // your Vue frontend
   credentials: true
->>>>>>> b4fb8b0bec2fd78eef6cc334bde511aa71d462c2
+
 }));
 
 app.use(express.json());

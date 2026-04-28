@@ -198,7 +198,8 @@ const { getAdminToken } = require("../config/keycloak");
 
 // const prisma = require("../config/prisma"); // adjust path if needed
 
-const prisma = require('../config/db')
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 exports.login = async (req, res) => {
   const { email, password } = req.body;
@@ -253,12 +254,6 @@ exports.login = async (req, res) => {
       data: { lastLoginAt: new Date() }
     });
 
-<<<<<<< HEAD
-    const employee = await prisma.employee.findFirst({
-      where: { userId: user.id, deletedAt: null },
-      select: { employeeCode: true }
-    });
-=======
     // Fetch employee code for profile/attendance API calls
     const employee = await prisma.employee.findFirst({
       where: { userId: user.id },
@@ -266,23 +261,11 @@ exports.login = async (req, res) => {
     });
     const roleName = user.role?.name?.toLowerCase();
 
->>>>>>> b4fb8b0bec2fd78eef6cc334bde511aa71d462c2
 
     // ✅ Step 4: Return response
     return res.status(200).json({
       message: "Login successful",
       access_token,
-<<<<<<< HEAD
-      refresh_token,
-      expires_in,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role?.name?.toLowerCase() || "employee",
-        isFirstLogin: user.isFirstLogin,
-        employeeCode: employee?.employeeCode || null
-      }
-=======
       user: {
         id: user.id,
         email: user.email,
@@ -293,7 +276,6 @@ exports.login = async (req, res) => {
       },
       refresh_token,
       expires_in
->>>>>>> b4fb8b0bec2fd78eef6cc334bde511aa71d462c2
     });
   } catch (err) {
     const errData = err.response?.data;
@@ -321,6 +303,7 @@ exports.login = async (req, res) => {
       return res.status(403).json({
         error: "Password change required",
         action: "Employee must change temporary password",
+        hint: "Call POST /api/auth/change-password"
       });
     }
 
@@ -335,12 +318,8 @@ exports.login = async (req, res) => {
       if (tempUser && tempUser.isFirstLogin) {
         return res.status(403).json({
           error: "Password change required",
-<<<<<<< HEAD
-          action: "Employee must change temporary password"
-=======
           action: "You must change your temporary password on first login",
           hint: "Call POST /api/auth/change-password"
->>>>>>> b4fb8b0bec2fd78eef6cc334bde511aa71d462c2
         });
       }
     }
@@ -465,25 +444,6 @@ exports.changePassword = async (req, res) => {
         },
       }
     );
-    
-
-    // Step 3 — Clear required actions so login is no longer blocked
-    await axios.put(
-      `${KEYCLOAK_URL}/admin/realms/${REALM}/users/${userId}`,
-      { requiredActions: [] },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    // Step 4 — Update database to mark first login complete
-    await prisma.user.update({
-      where: { email },
-      data: { isFirstLogin: false }
-    });
 
     // Step 3 — Update database to mark first login complete
     await prisma.user.update({
