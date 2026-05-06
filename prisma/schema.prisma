@@ -196,6 +196,9 @@ model Department {
   employees    Employee[]   @relation("EmployeeDept")
   designations Designation[]
 
+  calendarEvents   CalendarEvent[]
+
+
   @@map("departments")
 }
 
@@ -312,6 +315,11 @@ model Employee {
   headOfDepartments  Department[] @relation("DeptHead")
 
   @@map("employees")
+
+  createdEvents    CalendarEvent[]       @relation("EventCreatedBy")
+  eventAttendances EventAttendee[]
+  calendarSync     EmployeeCalendarSync?
+  createdHolidays  Holiday[]             @relation("HolidayCreatedBy")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -518,4 +526,114 @@ model AttendanceSummary {
   @@unique([employeeId, attendanceDate])
   @@index([attendanceDate])
   @@map("attendance_summaries")
+}
+
+//calenders
+
+model Holiday {
+  id          Int      @id @default(autoincrement())
+  name        String
+  date        DateTime @db.Date
+  type        String   @default("NATIONAL")   // NATIONAL | REGIONAL | OPTIONAL | COMPANY
+  stateCode   String?                          // null = all | "MH" = Maharashtra only
+  description String?
+  isActive    Boolean  @default(true)
+  createdById Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy Employee? @relation("HolidayCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([date, type, stateCode])
+  @@index([date])
+  @@map("holidays")
+}
+
+model CalendarEvent {
+  id             Int      @id @default(autoincrement())
+  title          String
+  description    String?
+  eventType      String                        // MEETING | TRAINING | COMPANY_EVENT
+                                               // BIRTHDAY | ANNIVERSARY | REMINDER | OTHER
+  startTime      DateTime
+  endTime        DateTime
+  isAllDay       Boolean  @default(false)
+  location       String?
+  meetLink       String?
+  visibility     String   @default("PUBLIC")  // PUBLIC | DEPARTMENT | PRIVATE
+  status         String   @default("ACTIVE")  // ACTIVE | CANCELLED | POSTPONED
+
+  isRecurring    Boolean   @default(false)
+  recurrenceRule String?                       // RRULE: "FREQ=WEEKLY;BYDAY=MO,WE,FR"
+  recurrenceEnd  DateTime?
+  parentEventId  Int?
+
+  createdById    Int
+  departmentId   Int?
+  googleEventId  String?
+  outlookEventId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdBy   Employee       @relation("EventCreatedBy", fields: [createdById], references: [id])
+  department  Department?    @relation(fields: [departmentId], references: [id])
+  parentEvent CalendarEvent?  @relation("RecurringInstances", fields: [parentEventId], references: [id])
+  instances   CalendarEvent[] @relation("RecurringInstances")
+  attendees   EventAttendee[]
+
+  @@index([startTime, endTime])
+  @@index([createdById])
+  @@map("calendar_events")
+}
+
+model EventAttendee {
+  id          Int      @id @default(autoincrement())
+  eventId     Int
+  employeeId  Int
+  isOrganizer Boolean  @default(false)
+  rsvpStatus  String   @default("PENDING")   // PENDING | ACCEPTED | DECLINED | TENTATIVE
+  notifiedAt  DateTime?
+  respondedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  event    CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  employee Employee      @relation(fields: [employeeId], references: [id])
+
+  @@unique([eventId, employeeId])
+  @@index([employeeId])
+  @@map("event_attendees")
+}
+
+model EmployeeCalendarSync {
+  id           Int      @id @default(autoincrement())
+  employeeId   Int      @unique
+  provider     String                         // GOOGLE | OUTLOOK
+  accessToken  String
+  refreshToken String
+  tokenExpiry  DateTime?
+  calendarId   String   @default("primary")
+  syncToken    String?
+  lastSyncedAt DateTime?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("employee_calendar_syncs")
+}
+
+model EventReminder {
+  id         Int      @id @default(autoincrement())
+  eventId    Int
+  employeeId Int
+  remindAt   DateTime
+  method     String   @default("EMAIL")       // EMAIL | IN_APP | BOTH
+  isSent     Boolean  @default(false)
+  sentAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([remindAt, isSent])
+  @@map("event_reminders")
 }

@@ -23,6 +23,8 @@ app.use("/api/admin",      require("./src/routes/admin.routes"));
 app.use("/api/lookups",    require("./src/routes/lookup.routes"));
 app.use("/api/attendance", require("./src/routes/attendance.routes"));
 
+app.use("/api/calendar",   require("./src/routes/calendar.routes"));
+
 //employee profile routes
 app.use("/api/employees",  require("./src/routes/profile.routes"));
 
