@@ -381,6 +381,115 @@ async function main() {
     ],
   });
 
+    // ─── 8. LEAVE TYPES ───────────────────────────────────────────────────────
+  console.log('🏖️ Seeding leave types...');
+
+  await prisma.leaveType.createMany({
+    data: [
+
+      {
+        code: 'CL',
+        name: 'Casual Leave',
+
+        maxDaysPerYear: 12,
+        carryForwardDays: 0,
+
+        encashable: false,
+        requiresDoc: false,
+
+        applicableGender: 'ALL',
+        minServiceDays: 0,
+      },
+
+      {
+        code: 'SL',
+        name: 'Sick Leave',
+
+        maxDaysPerYear: 6,
+        carryForwardDays: 0,
+
+        encashable: false,
+        requiresDoc: true,
+
+        applicableGender: 'ALL',
+        minServiceDays: 0,
+      },
+
+      {
+        code: 'EL',
+        name: 'Earned Leave',
+
+        maxDaysPerYear: 18,
+        carryForwardDays: 10,
+
+        encashable: true,
+        requiresDoc: false,
+
+        applicableGender: 'ALL',
+        minServiceDays: 180,
+      },
+
+      {
+        code: 'LWP',
+        name: 'Leave Without Pay',
+
+        maxDaysPerYear: 999,
+        carryForwardDays: 0,
+
+        encashable: false,
+        requiresDoc: false,
+
+        applicableGender: 'ALL',
+        minServiceDays: 0,
+      },
+
+      {
+        code: 'WFH',
+        name: 'Work From Home',
+
+        maxDaysPerYear: 24,
+        carryForwardDays: 0,
+
+        encashable: false,
+        requiresDoc: false,
+
+        applicableGender: 'ALL',
+        minServiceDays: 0,
+      },
+
+      {
+        code: 'ML',
+        name: 'Maternity Leave',
+
+        maxDaysPerYear: 180,
+        carryForwardDays: 0,
+
+        encashable: false,
+        requiresDoc: true,
+
+        applicableGender: 'FEMALE',
+        minServiceDays: 80,
+      },
+
+      {
+        code: 'PL',
+        name: 'Paternity Leave',
+
+        maxDaysPerYear: 15,
+        carryForwardDays: 0,
+
+        encashable: false,
+        requiresDoc: false,
+
+        applicableGender: 'MALE',
+        minServiceDays: 80,
+      }
+
+    ],
+
+    skipDuplicates: true,
+  });
+
   console.log('✅ HRMS Phase 1 seed complete!');
   console.log('');
   console.log('📊 Summary:');
@@ -396,6 +505,7 @@ async function main() {
   console.log(`   Designations:${await prisma.designation.count()}`);
   console.log(`   OfficeLocations: ${await prisma.officeLocation.count()}`);
   console.log(`   Shifts:      ${await prisma.shift.count()}`);
+  console.log(`   LeaveTypes:  ${await prisma.leaveType.count()}`);
 }
 
 main()

@@ -9,7 +9,6 @@ function parseDate(value) {
   const d = new Date(value);
   return isNaN(d.getTime()) ? null : d;
 }
-
 // ─────────────────────────────────────────
 // GET /api/employees/:code/personal
 // ─────────────────────────────────────────

@@ -1,93 +1,43 @@
 "use strict";
 
-// src/controllers/calendar.controller.js
-// HRMS — Calendar Management
-// Handles: holidays, events, attendees, RSVP, Google sync
-
 const prisma = require("../config/db");
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION A — SHARED HELPERS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-async function resolveEmployee(employeeCode) {
-  if (!employeeCode) return null;
-  return prisma.employee.findFirst({
-    where: { employeeCode, deletedAt: null },
-  });
-}
-
-// Get employee from JWT token (req.user set by auth middleware)
 async function getEmployeeIdFromReq(req) {
-  const keycloakId = req.user?.sub
-  if (!keycloakId) return null
-
-  const prisma = require('../config/db')
+  const keycloakId = req.user?.sub;
+  if (!keycloakId) return null;
   const employee = await prisma.employee.findFirst({
-    where: { user: { keycloakId } },
-    select: { id: true },
-  })
-  return employee?.id || null
+    where: { user: { keycloakId } }, select: { id: true },
+  });
+  return employee?.id || null;
 }
 
-// Build date range: start of day → end of day
-function dayRange(dateStr) {
-  const d = new Date(dateStr);
-  if (isNaN(d)) return null;
-  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const end   = new Date(start.getTime() + 864e5 - 1);
-  return { start, end };
-}
-
-// Build month range
 function monthRange(year, month) {
-  const start = new Date(year, month - 1, 1);
-  const end   = new Date(year, month, 0, 23, 59, 59);
-  return { start, end };
+  return {
+    start: new Date(year, month - 1, 1),
+    end:   new Date(year, month, 0, 23, 59, 59),
+  };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION B — HOLIDAY ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── HOLIDAYS ──────────────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/calendar/holidays
-// Query: { year, month, type, stateCode }
-// Returns all holidays for a given period
-// ─────────────────────────────────────────────────────────────────────────────
 async function getHolidays(req, res) {
   try {
-    const {
-      year      = new Date().getFullYear(),
-      month,
-      type,
-      stateCode,
-    } = req.query;
-
+    const { year = new Date().getFullYear(), month, type, stateCode } = req.query;
     let dateFilter;
     if (month) {
       const { start, end } = monthRange(parseInt(year), parseInt(month));
       dateFilter = { gte: start, lte: end };
     } else {
-      dateFilter = {
-        gte: new Date(`${year}-01-01`),
-        lte: new Date(`${year}-12-31`),
-      };
+      dateFilter = { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31`) };
     }
-
-    const where = {
-      isActive: true,
-      date: dateFilter,
-      ...(type      ? { type }      : {}),
-      ...(stateCode ? { OR: [{ stateCode }, { stateCode: null }] } : {}),
-    };
-
     const holidays = await prisma.holiday.findMany({
-      where,
+      where: {
+        isActive: true, date: dateFilter,
+        ...(type      ? { type }      : {}),
+        ...(stateCode ? { OR: [{ stateCode }, { stateCode: null }] } : {}),
+      },
       orderBy: { date: "asc" },
-      include: { createdBy: { select: { firstName: true, lastName: true } } },
     });
-
     return res.json({ success: true, holidays, total: holidays.length });
   } catch (err) {
     console.error("[getHolidays]", err);
@@ -95,47 +45,24 @@ async function getHolidays(req, res) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/calendar/holidays  (Admin only)
-// Body: { name, date, type, stateCode, description }
-// ─────────────────────────────────────────────────────────────────────────────
 async function createHoliday(req, res) {
   try {
     const { name, date, type = "NATIONAL", stateCode, description } = req.body;
-
-    if (!name || !date) {
-      return res.status(400).json({ error: "name and date are required" });
-    }
+    if (!name || !date) return res.status(400).json({ error: "name and date are required" });
 
     const parsedDate = new Date(date);
-    if (isNaN(parsedDate)) {
-      return res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD" });
-    }
+    if (isNaN(parsedDate)) return res.status(400).json({ error: "Invalid date format" });
 
     const VALID_TYPES = ["NATIONAL", "REGIONAL", "OPTIONAL", "COMPANY"];
-    if (!VALID_TYPES.includes(type)) {
-      return res.status(400).json({ error: `type must be one of: ${VALID_TYPES.join(", ")}` });
-    }
+    if (!VALID_TYPES.includes(type)) return res.status(400).json({ error: `type must be one of: ${VALID_TYPES.join(", ")}` });
 
-    // Check duplicate
-    const existing = await prisma.holiday.findFirst({
-      where: { date: parsedDate, type, stateCode: stateCode || null },
-    });
-    if (existing) {
-      return res.status(409).json({ error: "Holiday already exists for this date and type" });
-    }
+    const existing = await prisma.holiday.findFirst({ where: { date: parsedDate, type, stateCode: stateCode || null } });
+    if (existing) return res.status(409).json({ error: "Holiday already exists for this date and type" });
 
+    const createdById = await getEmployeeIdFromReq(req);
     const holiday = await prisma.holiday.create({
-      data: {
-        name,
-        date:        parsedDate,
-        type,
-        stateCode:   stateCode   || null,
-        description: description || null,
-        createdById: await getEmployeeIdFromReq(req),
-      },
+      data: { name, date: parsedDate, type, stateCode: stateCode || null, description: description || null, createdById },
     });
-
     return res.status(201).json({ success: true, holiday });
   } catch (err) {
     console.error("[createHoliday]", err);
@@ -143,32 +70,23 @@ async function createHoliday(req, res) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PUT /api/calendar/holidays/:id  (Admin only)
-// Body: { name, date, type, stateCode, description, isActive }
-// ─────────────────────────────────────────────────────────────────────────────
 async function updateHoliday(req, res) {
   try {
     const { id } = req.params;
-    const { name, date, type, stateCode, description, isActive } = req.body;
-
     const existing = await prisma.holiday.findUnique({ where: { id: parseInt(id) } });
-    if (!existing) {
-      return res.status(404).json({ error: "Holiday not found" });
-    }
-
+    if (!existing) return res.status(404).json({ error: "Holiday not found" });
+    const { name, date, type, stateCode, description, isActive } = req.body;
     const holiday = await prisma.holiday.update({
       where: { id: parseInt(id) },
       data: {
-        ...(name        !== undefined ? { name }                   : {}),
-        ...(date        !== undefined ? { date: new Date(date) }   : {}),
-        ...(type        !== undefined ? { type }                   : {}),
-        ...(stateCode   !== undefined ? { stateCode }              : {}),
-        ...(description !== undefined ? { description }            : {}),
-        ...(isActive    !== undefined ? { isActive }               : {}),
+        ...(name        !== undefined ? { name }                 : {}),
+        ...(date        !== undefined ? { date: new Date(date) } : {}),
+        ...(type        !== undefined ? { type }                 : {}),
+        ...(stateCode   !== undefined ? { stateCode }            : {}),
+        ...(description !== undefined ? { description }          : {}),
+        ...(isActive    !== undefined ? { isActive }             : {}),
       },
     });
-
     return res.json({ success: true, holiday });
   } catch (err) {
     console.error("[updateHoliday]", err);
@@ -176,162 +94,122 @@ async function updateHoliday(req, res) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DELETE /api/calendar/holidays/:id  (Admin only — soft delete)
-// ─────────────────────────────────────────────────────────────────────────────
 async function deleteHoliday(req, res) {
   try {
-    const { id } = req.params;
-
-    const existing = await prisma.holiday.findUnique({ where: { id: parseInt(id) } });
-    if (!existing) {
-      return res.status(404).json({ error: "Holiday not found" });
-    }
-
-    await prisma.holiday.update({
-      where: { id: parseInt(id) },
-      data:  { isActive: false },
-    });
-
-    return res.json({ success: true, message: "Holiday removed" });
+    const existing = await prisma.holiday.findUnique({ where: { id: parseInt(req.params.id) } });
+    if (!existing) return res.status(404).json({ error: "Holiday not found" });
+    await prisma.holiday.delete({ where: { id: parseInt(req.params.id) } });
+    return res.json({ success: true, message: "Holiday deleted" });
   } catch (err) {
     console.error("[deleteHoliday]", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION C — CALENDAR EVENT ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── EVENTS ────────────────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/calendar/events
-// Query: { from, to, type, departmentId, employeeCode, myEvents }
-// Returns events in a date range (for calendar rendering)
-// ─────────────────────────────────────────────────────────────────────────────
 async function getEvents(req, res) {
   try {
-    const {
-      from,
-      to,
-      type,
-      departmentId,
-      myEvents,    // "true" → only events I created or am invited to
-    } = req.query;
-
-    if (!from || !to) {
-      return res.status(400).json({ error: "from and to query params are required (YYYY-MM-DD)" });
-    }
+    const { from, to, type, departmentId, myEvents } = req.query;
+    if (!from || !to) return res.status(400).json({ error: "from and to are required" });
 
     const fromDate = new Date(from);
     const toDate   = new Date(to + "T23:59:59");
-
-    if (isNaN(fromDate) || isNaN(toDate)) {
-      return res.status(400).json({ error: "Invalid date range" });
-    }
+    if (isNaN(fromDate) || isNaN(toDate)) return res.status(400).json({ error: "Invalid date range" });
 
     const employeeId = await getEmployeeIdFromReq(req);
 
-    // Base filter: events that overlap the requested range
-    const where = {
-      status:    { not: "CANCELLED" },
-      startTime: { lte: toDate },
-      endTime:   { gte: fromDate },
-      ...(type         ? { eventType: type }                : {}),
-      ...(departmentId ? { departmentId: parseInt(departmentId) } : {}),
-    };
-
-    // If "myEvents=true" → only events I own or am invited to
-    if (myEvents === "true" && employeeId) {
-      where.OR = [
-        { createdById: employeeId },
-        { attendees: { some: { employeeId } } },
-      ];
-    } else {
-      // Otherwise: PUBLIC events + DEPARTMENT events for my department + my private events
-      if (employeeId) {
-        where.OR = [
-          { visibility: "PUBLIC" },
-          { createdById: employeeId },
-          { attendees: { some: { employeeId } } },
-        ];
-      } else {
-        where.visibility = "PUBLIC";
-      }
+    // Get my department so DEPARTMENT events filter correctly
+    let myDepartmentId = null;
+    if (employeeId) {
+      const emp = await prisma.employee.findUnique({ where: { id: employeeId }, select: { departmentId: true } });
+      myDepartmentId = emp?.departmentId || null;
     }
 
+    let visibilityFilter;
+
+if (myEvents === "true" && employeeId) {
+
+  visibilityFilter = [
+    { createdById: employeeId },
+    { attendees: { some: { employeeId } } }
+  ];
+
+} else if (employeeId) {
+
+  visibilityFilter = [
+
+    // ✅ PUBLIC EVENTS
+    { visibility: "PUBLIC" },
+
+    // ✅ MY CREATED EVENTS
+    { createdById: employeeId },
+
+    // ✅ EVENTS I AM ATTENDING
+    { attendees: { some: { employeeId } } },
+
+    // ✅ DEPARTMENT EVENTS
+    ...(myDepartmentId
+      ? [{
+          visibility: "DEPARTMENT",
+          departmentId: myDepartmentId
+        }]
+      : [])
+  ];
+
+} else {
+
+  visibilityFilter = [
+    { visibility: "PUBLIC" }
+  ];
+}
+
     const events = await prisma.calendarEvent.findMany({
-      where,
+      where: {
+        status: { not: "CANCELLED" },
+        startTime: { lte: toDate },
+        endTime:   { gte: fromDate },
+        OR: visibilityFilter,
+        ...(type         ? { eventType: type }                      : {}),
+        ...(departmentId ? { departmentId: parseInt(departmentId) } : {}),
+      },
       orderBy: { startTime: "asc" },
       include: {
-        createdBy: {
-          select: { id: true, firstName: true, lastName: true, workEmail: true },
-        },
+        createdBy:  { select: { id: true, firstName: true, lastName: true } },
         department: { select: { id: true, name: true } },
         attendees: {
           include: {
-            employee: {
-              select: { id: true, firstName: true, lastName: true, workEmail: true },
-            },
+            employee: { select: { id: true, firstName: true, lastName: true, workEmail: true } },
           },
         },
       },
     });
 
-    // Also fetch holidays in the same range — combine into one response
     const holidays = await prisma.holiday.findMany({
-      where: {
-        isActive: true,
-        date: { gte: fromDate, lte: toDate },
-      },
+      where: { isActive: true, date: { gte: fromDate, lte: toDate } },
       orderBy: { date: "asc" },
     });
 
-    return res.json({
-      success: true,
-      events,
-      holidays,
-      total: events.length + holidays.length,
-    });
+    return res.json({ success: true, events, holidays, total: events.length + holidays.length });
   } catch (err) {
     console.error("[getEvents]", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/calendar/events/:id
-// Returns single event with all attendees
-// ─────────────────────────────────────────────────────────────────────────────
 async function getEventById(req, res) {
   try {
-    const { id } = req.params;
-
     const event = await prisma.calendarEvent.findUnique({
-      where: { id: parseInt(id) },
+      where: { id: parseInt(req.params.id) },
       include: {
-        createdBy: {
-          select: { id: true, firstName: true, lastName: true, workEmail: true },
-        },
+        createdBy:  { select: { id: true, firstName: true, lastName: true, workEmail: true } },
         department: { select: { id: true, name: true } },
         attendees: {
-          include: {
-            employee: {
-              select: {
-                id: true, firstName: true, lastName: true,
-                workEmail: true,
-                personalDetail: { select: { profilePhotoUrl: true } },
-              },
-            },
-          },
+          include: { employee: { select: { id: true, firstName: true, lastName: true, workEmail: true } } },
         },
       },
     });
-
-    if (!event) {
-      return res.status(404).json({ error: "Event not found" });
-    }
-
+    if (!event) return res.status(404).json({ error: "Event not found" });
     return res.json({ success: true, event });
   } catch (err) {
     console.error("[getEventById]", err);
@@ -339,376 +217,191 @@ async function getEventById(req, res) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/calendar/events
-// Body: { title, description, eventType, startTime, endTime, isAllDay,
-//         location, meetLink, visibility, departmentId,
-//         isRecurring, recurrenceRule, recurrenceEnd,
-//         attendeeIds[] }
-// ─────────────────────────────────────────────────────────────────────────────
+// KEY FUNCTION — auto-invites employees based on visibility
 async function createEvent(req, res) {
   try {
     const {
-      title,
-      description,
-      eventType    = "MEETING",
-      startTime,
-      endTime,
-      isAllDay     = false,
-      location,
-      meetLink,
-      visibility   = "PUBLIC",
-      departmentId,
-      isRecurring  = false,
-      recurrenceRule,
-      recurrenceEnd,
-      attendeeIds  = [],
+      title, description, eventType = "MEETING",
+      startTime, endTime, isAllDay = false,
+      location, meetLink, visibility = "PUBLIC",
+      departmentId, isRecurring = false,
+      recurrenceRule, recurrenceEnd,
+      attendeeIds = [],
     } = req.body;
 
-    // ── Basic Validation ─────────────────────────────────────────────
     if (!title || !startTime || !endTime) {
-      return res.status(400).json({
-        error: "title, startTime and endTime are required",
-      });
+      return res.status(400).json({ error: "title, startTime and endTime are required" });
     }
 
     const start = new Date(startTime);
     const end   = new Date(endTime);
-
-    if (isNaN(start) || isNaN(end)) {
-      return res.status(400).json({
-        error: "Invalid startTime or endTime",
-      });
-    }
-
-    if (end <= start) {
-      return res.status(400).json({
-        error: "endTime must be after startTime",
-      });
-    }
-
-    if (!Array.isArray(attendeeIds)) {
-      return res.status(400).json({
-        error: "attendeeIds must be an array",
-      });
-    }
-
-    const VALID_TYPES = [
-      "MEETING", "TRAINING", "COMPANY_EVENT",
-      "BIRTHDAY", "ANNIVERSARY", "REMINDER", "OTHER"
-    ];
-
-    if (!VALID_TYPES.includes(eventType)) {
-      return res.status(400).json({
-        error: `eventType must be one of: ${VALID_TYPES.join(", ")}`,
-      });
-    }
-
-    const VALID_VISIBILITY = ["PUBLIC", "DEPARTMENT", "PRIVATE"];
-
-    if (!VALID_VISIBILITY.includes(visibility)) {
-      return res.status(400).json({
-        error: `visibility must be one of: ${VALID_VISIBILITY.join(", ")}`,
-      });
+    if (isNaN(start) || isNaN(end)) return res.status(400).json({ error: "Invalid startTime or endTime" });
+    if (end <= start) return res.status(400).json({ error: "endTime must be after startTime" });
+    if (visibility === "DEPARTMENT" && !departmentId) {
+      return res.status(400).json({ error: "departmentId is required for DEPARTMENT visibility" });
     }
 
     const createdById = await getEmployeeIdFromReq(req);
-    if (!createdById) {
-      return res.status(401).json({ error: "Authentication required" });
-    }
+    if (!createdById) return res.status(401).json({ error: "Authentication required" });
 
-    // Ensure creator exists
-    const employeeExists = await prisma.employee.findUnique({
-      where: { id: createdById },
-      select: { id: true },
-    });
+    const employeeExists = await prisma.employee.findUnique({ where: { id: createdById }, select: { id: true } });
+    if (!employeeExists) return res.status(404).json({ error: "Employee profile not linked to this account" });
 
-    if (!employeeExists) {
-      return res.status(404).json({
-        error: "Employee profile not found",
+    // ── Resolve target employees based on visibility ───────────────────────
+    let targetEmployeeIds = [];
+
+    if (visibility === "PUBLIC") {
+      // Everyone in the company
+      const all = await prisma.employee.findMany({
+        where: { deletedAt: null, isActive: true }, select: { id: true },
       });
-    }
+      targetEmployeeIds = all.map(e => e.id);
 
-    // ── Transaction ─────────────────────────────────────────────────
-    const event = await prisma.$transaction(async (tx) => {
-
-      // 1. Create event
-      const newEvent = await tx.calendarEvent.create({
-        data: {
-          title,
-          description:   description || null,
-          eventType,
-          startTime:     start,
-          endTime:       end,
-          isAllDay,
-          location:      location || null,
-          meetLink:      meetLink || null,
-          visibility,
-          departmentId:  departmentId ? parseInt(departmentId) : null,
-          isRecurring,
-          recurrenceRule: isRecurring ? (recurrenceRule || null) : null,
-          recurrenceEnd:  isRecurring && recurrenceEnd
-            ? new Date(recurrenceEnd)
-            : null,
-          createdById,
-          status: "ACTIVE",
-        },
-      });
-
-      // 2. Prepare attendee list
-      const uniqueAttendees = [
-        ...new Set(attendeeIds.map(Number).filter(Boolean)),
-      ].filter(id => id !== createdById);
-
-      // 3. Validate attendees from DB
-      const validEmployees = await tx.employee.findMany({
-        where: {
-          id: { in: uniqueAttendees },
-          deletedAt: null,
-        },
+    } else if (visibility === "DEPARTMENT" && departmentId) {
+      // Only that department's employees
+      const deptEmps = await prisma.employee.findMany({
+        where: { deletedAt: null, isActive: true, departmentId: parseInt(departmentId) },
         select: { id: true },
       });
+      targetEmployeeIds = deptEmps.map(e => e.id);
 
-      const validEmployeeIds = new Set(validEmployees.map(e => e.id));
+    } else if (visibility === "PRIVATE") {
+      // Only manually listed attendees
+      targetEmployeeIds = [...new Set(attendeeIds.map(Number))];
+    }
 
-      // ❗ OPTION A: Fail fast (recommended)
-      if (validEmployeeIds.size !== uniqueAttendees.length) {
-        return res.status(400).json({
-          error: "Some attendeeIds are invalid or do not exist",
-        });
-      }
+    // Creator always included
+    if (!targetEmployeeIds.includes(createdById)) targetEmployeeIds.push(createdById);
 
-      // 4. Build attendee data
-      const attendeeData = [
-        {
-          eventId:     newEvent.id,
-          employeeId:  createdById,
-          isOrganizer: true,
-          rsvpStatus:  "ACCEPTED",
+    // ── Transaction: event + attendees + notifications ─────────────────────
+    const event = await prisma.$transaction(async (tx) => {
+      const newEvent = await tx.calendarEvent.create({
+        data: {
+          title, description: description || null, eventType,
+          startTime: start, endTime: end, isAllDay,
+          location: location || null, meetLink: meetLink || null,
+          visibility, departmentId: departmentId ? parseInt(departmentId) : null,
+          isRecurring,
+          recurrenceRule: isRecurring ? (recurrenceRule || null) : null,
+          recurrenceEnd:  isRecurring && recurrenceEnd ? new Date(recurrenceEnd) : null,
+          createdById, status: "ACTIVE",
         },
-        ...uniqueAttendees.map(empId => ({
+      });
+
+      // Attendees
+      await tx.eventAttendee.createMany({
+        data: targetEmployeeIds.map(empId => ({
           eventId:     newEvent.id,
           employeeId:  empId,
-          isOrganizer: false,
-          rsvpStatus:  "PENDING",
+          isOrganizer: empId === createdById,
+          rsvpStatus:  empId === createdById ? "ACCEPTED" : "PENDING",
         })),
-      ];
-
-      // 5. Insert attendees safely
-      await tx.eventAttendee.createMany({
-        data: attendeeData,
         skipDuplicates: true,
       });
+
+      // Notifications for everyone except creator
+      const notifData = targetEmployeeIds
+        .filter(empId => empId !== createdById)
+        .map(empId => ({
+          eventId: newEvent.id, employeeId: empId,
+          remindAt: new Date(), method: "IN_APP", isSent: false,
+        }));
+
+      if (notifData.length > 0) {
+        await tx.eventReminder.createMany({ data: notifData });
+      }
 
       return newEvent;
     });
 
-    // ── Fetch full event ────────────────────────────────────────────
     const fullEvent = await prisma.calendarEvent.findUnique({
       where: { id: event.id },
       include: {
-        createdBy: {
-          select: { id: true, firstName: true, lastName: true },
-        },
+        createdBy:  { select: { id: true, firstName: true, lastName: true } },
+        department: { select: { id: true, name: true } },
         attendees: {
-          include: {
-            employee: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                workEmail: true,
-              },
-            },
-          },
+          include: { employee: { select: { id: true, firstName: true, lastName: true, workEmail: true } } },
         },
       },
     });
 
-    return res.status(201).json({
-      success: true,
-      event: fullEvent,
-    });
-
+    return res.status(201).json({ success: true, event: fullEvent, invited: targetEmployeeIds.length });
   } catch (err) {
     console.error("[createEvent]", err);
-
-    return res.status(500).json({
-      error: "Internal server error",
-    });
+    return res.status(500).json({ error: "Internal server error" });
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PUT /api/calendar/events/:id
-// Body: any subset of createEvent fields + { addAttendeeIds[], removeAttendeeIds[] }
-// Only creator or admin can update
-// ─────────────────────────────────────────────────────────────────────────────
 async function updateEvent(req, res) {
   try {
-    const { id } = req.params;
-    const eventId = parseInt(id);
-
+    const { id }     = req.params;
     const employeeId = await getEmployeeIdFromReq(req);
-
-    const existingEvent = await prisma.calendarEvent.findUnique({
-      where: { id: eventId },
-    });
-
-    if (!existingEvent) {
-      return res.status(404).json({ error: "Event not found" });
+    const existing   = await prisma.calendarEvent.findUnique({ where: { id: parseInt(id) } });
+    if (!existing) return res.status(404).json({ error: "Event not found" });
+    if (existing.createdById !== employeeId && req.user?.role !== "admin") {
+      return res.status(403).json({ error: "Not authorized" });
     }
-
-    // Authorization
-    if (
-      existingEvent.createdById !== employeeId &&
-      req.user?.role !== "admin"
-    ) {
-      return res.status(403).json({
-        error: "Not authorized to update this event",
-      });
-    }
-
     const {
-      title, description, eventType, startTime, endTime,
-      isAllDay, location, meetLink, visibility, status,
-      departmentId, isRecurring, recurrenceRule, recurrenceEnd,
-      addAttendeeIds = [],
-      removeAttendeeIds = [],
+      title, description, eventType, startTime, endTime, isAllDay,
+      location, meetLink, visibility, status, departmentId,
+      isRecurring, recurrenceRule, recurrenceEnd,
+      addAttendeeIds = [], removeAttendeeIds = [],
     } = req.body;
 
     const updated = await prisma.$transaction(async (tx) => {
-
-      // ── 1. Update event ──────────────────────────────────────────
-      const updatedEvent = await tx.calendarEvent.update({
-        where: { id: eventId },
+      const ev = await tx.calendarEvent.update({
+        where: { id: parseInt(id) },
         data: {
-          ...(title          !== undefined ? { title } : {}),
-          ...(description    !== undefined ? { description } : {}),
-          ...(eventType      !== undefined ? { eventType } : {}),
+          ...(title          !== undefined ? { title }                          : {}),
+          ...(description    !== undefined ? { description }                    : {}),
+          ...(eventType      !== undefined ? { eventType }                      : {}),
           ...(startTime      !== undefined ? { startTime: new Date(startTime) } : {}),
-          ...(endTime        !== undefined ? { endTime: new Date(endTime) } : {}),
-          ...(isAllDay       !== undefined ? { isAllDay } : {}),
-          ...(location       !== undefined ? { location } : {}),
-          ...(meetLink       !== undefined ? { meetLink } : {}),
-          ...(visibility     !== undefined ? { visibility } : {}),
-          ...(status         !== undefined ? { status } : {}),
+          ...(endTime        !== undefined ? { endTime:   new Date(endTime)   } : {}),
+          ...(isAllDay       !== undefined ? { isAllDay }                       : {}),
+          ...(location       !== undefined ? { location }                       : {}),
+          ...(meetLink       !== undefined ? { meetLink }                       : {}),
+          ...(visibility     !== undefined ? { visibility }                     : {}),
+          ...(status         !== undefined ? { status }                         : {}),
           ...(departmentId   !== undefined ? { departmentId: parseInt(departmentId) } : {}),
-          ...(isRecurring    !== undefined ? { isRecurring } : {}),
-          ...(recurrenceRule !== undefined ? { recurrenceRule } : {}),
+          ...(isRecurring    !== undefined ? { isRecurring }                    : {}),
+          ...(recurrenceRule !== undefined ? { recurrenceRule }                 : {}),
           ...(recurrenceEnd  !== undefined ? { recurrenceEnd: new Date(recurrenceEnd) } : {}),
         },
       });
-
-      // ── 2. Remove attendees (safe) ───────────────────────────────
-      if (Array.isArray(removeAttendeeIds) && removeAttendeeIds.length > 0) {
+      if (removeAttendeeIds.length > 0) {
         await tx.eventAttendee.deleteMany({
-          where: {
-            eventId,
-            employeeId: { in: removeAttendeeIds.map(Number) },
-            isOrganizer: false, // never remove organizer
-          },
+          where: { eventId: parseInt(id), employeeId: { in: removeAttendeeIds.map(Number) }, isOrganizer: false },
         });
       }
-
-      // ── 3. Add attendees (FIXED LOGIC) ───────────────────────────
-      if (Array.isArray(addAttendeeIds) && addAttendeeIds.length > 0) {
-
-        const parsedIds = [
-          ...new Set(addAttendeeIds.map(Number).filter(Boolean)),
-        ];
-
-        // 3A. Get already existing attendees
-        const existingAttendees = await tx.eventAttendee.findMany({
-          where: { eventId },
-          select: { employeeId: true },
-        });
-
-        const existingIds = new Set(
-          existingAttendees.map(a => a.employeeId)
-        );
-
-        // 3B. Remove duplicates + organizer
-        const candidateIds = parsedIds.filter(
-          id => !existingIds.has(id) && id !== existingEvent.createdById
-        );
-
-        if (candidateIds.length > 0) {
-
-          // 3C. Validate employees exist
-          const validEmployees = await tx.employee.findMany({
-            where: {
-              id: { in: candidateIds },
-              deletedAt: null,
-            },
-            select: { id: true },
-          });
-
-          const validIds = new Set(validEmployees.map(e => e.id));
-
-          // ❗ OPTION A: Fail fast
-          if (validIds.size !== candidateIds.length) {
-            throw new Error("Some attendeeIds are invalid");
-          }
-
-          // 3D. Insert safely
+      if (addAttendeeIds.length > 0) {
+        const existingA = await tx.eventAttendee.findMany({ where: { eventId: parseInt(id) }, select: { employeeId: true } });
+        const existingIds = new Set(existingA.map(a => a.employeeId));
+        const newOnes = addAttendeeIds.map(Number).filter(i => !existingIds.has(i));
+        if (newOnes.length > 0) {
           await tx.eventAttendee.createMany({
-            data: candidateIds.map(empId => ({
-              eventId,
-              employeeId: empId,
-              rsvpStatus: "PENDING",
-            })),
-            skipDuplicates: true,
+            data: newOnes.map(empId => ({ eventId: parseInt(id), employeeId: empId, rsvpStatus: "PENDING" })),
           });
         }
       }
-
-      return updatedEvent;
+      return ev;
     });
-
-    return res.json({
-      success: true,
-      event: updated,
-    });
-
+    return res.json({ success: true, event: updated });
   } catch (err) {
     console.error("[updateEvent]", err);
-
-    // Clean error response for FK / validation
-    if (err.message.includes("invalid")) {
-      return res.status(400).json({
-        error: err.message,
-      });
-    }
-
-    return res.status(500).json({
-      error: "Internal server error",
-    });
+    return res.status(500).json({ error: "Internal server error" });
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DELETE /api/calendar/events/:id  (soft cancel)
-// ─────────────────────────────────────────────────────────────────────────────
 async function cancelEvent(req, res) {
   try {
-    const { id } = req.params;
+    const { id }     = req.params;
     const employeeId = await getEmployeeIdFromReq(req);
-
-    const existing = await prisma.calendarEvent.findUnique({ where: { id: parseInt(id) } });
-    if (!existing) {
-      return res.status(404).json({ error: "Event not found" });
-    }
-
+    const existing   = await prisma.calendarEvent.findUnique({ where: { id: parseInt(id) } });
+    if (!existing) return res.status(404).json({ error: "Event not found" });
     if (existing.createdById !== employeeId && req.user?.role !== "admin") {
-      return res.status(403).json({ error: "Not authorized to cancel this event" });
+      return res.status(403).json({ error: "Not authorized" });
     }
-
-    await prisma.calendarEvent.update({
-      where: { id: parseInt(id) },
-      data:  { status: "CANCELLED" },
-    });
-
+    await prisma.calendarEvent.update({ where: { id: parseInt(id) }, data: { status: "CANCELLED" } });
     return res.json({ success: true, message: "Event cancelled" });
   } catch (err) {
     console.error("[cancelEvent]", err);
@@ -716,38 +409,23 @@ async function cancelEvent(req, res) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION D — ATTENDEE / RSVP ENDPOINTS
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── ATTENDEES ─────────────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PUT /api/calendar/events/:id/rsvp
-// Body: { rsvpStatus }  → "ACCEPTED" | "DECLINED" | "TENTATIVE"
-// ─────────────────────────────────────────────────────────────────────────────
 async function respondToEvent(req, res) {
   try {
-    const { id }       = req.params;
+    const { id }         = req.params;
     const { rsvpStatus } = req.body;
-    const employeeId   = await getEmployeeIdFromReq(req);
-
+    const employeeId     = await getEmployeeIdFromReq(req);
     const VALID = ["ACCEPTED", "DECLINED", "TENTATIVE"];
-    if (!VALID.includes(rsvpStatus)) {
-      return res.status(400).json({ error: `rsvpStatus must be one of: ${VALID.join(", ")}` });
-    }
-
+    if (!VALID.includes(rsvpStatus)) return res.status(400).json({ error: `rsvpStatus must be one of: ${VALID.join(", ")}` });
     const attendee = await prisma.eventAttendee.findUnique({
       where: { eventId_employeeId: { eventId: parseInt(id), employeeId } },
     });
-
-    if (!attendee) {
-      return res.status(404).json({ error: "You are not invited to this event" });
-    }
-
+    if (!attendee) return res.status(404).json({ error: "You are not invited to this event" });
     const updated = await prisma.eventAttendee.update({
       where: { eventId_employeeId: { eventId: parseInt(id), employeeId } },
       data:  { rsvpStatus, respondedAt: new Date() },
     });
-
     return res.json({ success: true, attendee: updated });
   } catch (err) {
     console.error("[respondToEvent]", err);
@@ -755,281 +433,203 @@ async function respondToEvent(req, res) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/calendar/events/:id/invite
-// Body: { employeeIds[] }
-// Admin / organizer adds more attendees after creation
-// ─────────────────────────────────────────────────────────────────────────────
 async function inviteAttendees(req, res) {
   try {
     const { id }          = req.params;
     const { employeeIds } = req.body;
-    const requesterId     = getEmployeeIdFromReq(req);
-
-    if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) {
-      return res.status(400).json({ error: "employeeIds array is required" });
-    }
-
+    const requesterId     = await getEmployeeIdFromReq(req);
+    if (!employeeIds?.length) return res.status(400).json({ error: "employeeIds array is required" });
     const event = await prisma.calendarEvent.findUnique({ where: { id: parseInt(id) } });
     if (!event) return res.status(404).json({ error: "Event not found" });
-
     if (event.createdById !== requesterId && req.user?.role !== "admin") {
-      return res.status(403).json({ error: "Only the organizer or admin can invite attendees" });
+      return res.status(403).json({ error: "Only organizer or admin can invite" });
     }
-
-    // Skip already-invited
-    const existing = await prisma.eventAttendee.findMany({
-      where: { eventId: parseInt(id) },
-      select: { employeeId: true },
-    });
-    const existingIds  = new Set(existing.map(a => a.employeeId));
-    const newAttendees = [...new Set(employeeIds.map(Number))].filter(eid => !existingIds.has(eid));
-
-    if (newAttendees.length === 0) {
-      return res.json({ success: true, message: "All employees are already invited", added: 0 });
-    }
-
+    const existing    = await prisma.eventAttendee.findMany({ where: { eventId: parseInt(id) }, select: { employeeId: true } });
+    const existingIds = new Set(existing.map(a => a.employeeId));
+    const newOnes     = [...new Set(employeeIds.map(Number))].filter(eid => !existingIds.has(eid));
+    if (newOnes.length === 0) return res.json({ success: true, message: "All already invited", added: 0 });
     await prisma.eventAttendee.createMany({
-      data: newAttendees.map(empId => ({
-        eventId:    parseInt(id),
-        employeeId: empId,
-        rsvpStatus: "PENDING",
-      })),
+      data: newOnes.map(empId => ({ eventId: parseInt(id), employeeId: empId, rsvpStatus: "PENDING" })),
     });
-
-    return res.json({ success: true, added: newAttendees.length });
+    return res.json({ success: true, added: newOnes.length });
   } catch (err) {
     console.error("[inviteAttendees]", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION E — TEAM AVAILABILITY VIEW
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/calendar/team-view
-// Query: { from, to, departmentId }
-// Shows who's on leave / present / has meetings for a week
-// ─────────────────────────────────────────────────────────────────────────────
-async function getTeamView(req, res) {
+async function getMyNotifications(req, res) {
   try {
-    const {
-      from         = new Date().toISOString().split("T")[0],
-      to,
-      departmentId,
-    } = req.query;
+    const employeeId = await getEmployeeIdFromReq(req);
+    if (!employeeId) return res.status(401).json({ error: "Authentication required" });
 
-    const toDate   = to || from;
-    const fromDate = new Date(from);
-    const endDate  = new Date(toDate + "T23:59:59");
-
-    // ── Fetch employees ──
-    const empWhere = {
-      deletedAt: null,
-      isActive:  true,
-      ...(departmentId ? { departmentId: parseInt(departmentId) } : {}),
-    };
-
-    const employees = await prisma.employee.findMany({
-      where:   empWhere,
-      orderBy: { firstName: "asc" },
-      select: {
-        id: true, firstName: true, lastName: true, workEmail: true,
-        department:  { select: { name: true } },
-        designation: { select: { name: true } },
-        personalDetail: { select: { profilePhotoUrl: true } },
-      },
+    const notifications = await prisma.eventReminder.findMany({
+      where: { employeeId, isSent: false },
+      orderBy: { createdAt: "desc" },
+      take: 20,
     });
 
-    const employeeIds = employees.map(e => e.id);
+    const eventIds = [...new Set(notifications.map(n => n.eventId))];
+    const events   = await prisma.calendarEvent.findMany({
+      where:   { id: { in: eventIds } },
+      include: { createdBy: { select: { firstName: true, lastName: true } }, department: { select: { name: true } } },
+    });
+    const eventMap = new Map(events.map(e => [e.id, e]));
 
-    // ── Fetch attendance summaries for date range ──
-    const summaries = await prisma.attendanceSummary.findMany({
-      where: {
-        employeeId:     { in: employeeIds },
-        attendanceDate: { gte: fromDate, lte: endDate },
-      },
+    const result = notifications.map(n => {
+      const ev = eventMap.get(n.eventId);
+      return {
+        id:         n.id,
+        eventId:    n.eventId,
+        title:      ev?.title || "Event",
+        eventType:  ev?.eventType,
+        startTime:  ev?.startTime,
+        department: ev?.department?.name || null,
+        createdBy:  ev?.createdBy ? `${ev.createdBy.firstName} ${ev.createdBy.lastName}` : null,
+        meetLink:   ev?.meetLink  || null,
+        remindAt:   n.remindAt,
+        isRead:     n.isSent,
+        createdAt:  n.createdAt,
+      };
     });
 
-    // ── Fetch holidays in range ──
-    const holidays = await prisma.holiday.findMany({
-      where: { isActive: true, date: { gte: fromDate, lte: endDate } },
-    });
-    const holidayDates = new Set(holidays.map(h => h.date.toISOString().split("T")[0]));
-
-    // ── Fetch events each employee is invited to ──
-    const eventAttendances = await prisma.eventAttendee.findMany({
-      where: {
-        employeeId: { in: employeeIds },
-        event: {
-          status:    "ACTIVE",
-          startTime: { lte: endDate },
-          endTime:   { gte: fromDate },
-        },
-      },
-      include: {
-        event: {
-          select: { id: true, title: true, startTime: true, endTime: true, eventType: true, meetLink: true },
-        },
-      },
-    });
-
-    // Index for fast lookup
-    const summaryMap        = new Map();
-    const eventAttendanceMap = new Map();
-
-    summaries.forEach(s => {
-      const key = `${s.employeeId}_${s.attendanceDate.toISOString().split("T")[0]}`;
-      summaryMap.set(key, s);
-    });
-
-    eventAttendances.forEach(ea => {
-      if (!eventAttendanceMap.has(ea.employeeId)) eventAttendanceMap.set(ea.employeeId, []);
-      eventAttendanceMap.get(ea.employeeId).push(ea.event);
-    });
-
-    // ── Build response ──
-    const teamData = employees.map(emp => ({
-      employee:       emp,
-      attendanceDays: summaries
-        .filter(s => s.employeeId === emp.id)
-        .map(s => ({
-          date:   s.attendanceDate.toISOString().split("T")[0],
-          status: s.status,
-          checkIn:  s.firstCheckIn,
-          checkOut: s.lastCheckOut,
-        })),
-      meetings: (eventAttendanceMap.get(emp.id) || []),
-    }));
-
-    return res.json({
-      success:    true,
-      teamData,
-      holidays,
-      holidayDates: [...holidayDates],
-      dateRange:  { from, to: toDate },
-    });
+    return res.json({ success: true, notifications: result, unreadCount: result.length });
   } catch (err) {
-    console.error("[getTeamView]", err);
+    console.error("[getMyNotifications]", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION F — MY CALENDAR (Personal view)
-// ═══════════════════════════════════════════════════════════════════════════════
+async function markNotificationRead(req, res) {
+  try {
+    const employeeId = await getEmployeeIdFromReq(req);
+    await prisma.eventReminder.updateMany({
+      where: { id: parseInt(req.params.id), employeeId },
+      data:  { isSent: true, sentAt: new Date() },
+    });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("[markNotificationRead]", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/calendar/my-calendar
-// Query: { from, to }
-// Returns personal events + holidays + attendance summary for the range
-// ─────────────────────────────────────────────────────────────────────────────
+async function markAllNotificationsRead(req, res) {
+  try {
+    const employeeId = await getEmployeeIdFromReq(req);
+    await prisma.eventReminder.updateMany({
+      where: { employeeId, isSent: false },
+      data:  { isSent: true, sentAt: new Date() },
+    });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("[markAllNotificationsRead]", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+// ── VIEWS ─────────────────────────────────────────────────────────────────────
+
 async function getMyCalendar(req, res) {
   try {
-    const {
-      from = new Date().toISOString().split("T")[0],
-      to,
-    } = req.query;
-
+    const { from = new Date().toISOString().split("T")[0], to } = req.query;
     const toDate   = to || from;
     const fromDate = new Date(from);
     const endDate  = new Date(toDate + "T23:59:59");
-
     const employeeId = await getEmployeeIdFromReq(req);
     if (!employeeId) return res.status(401).json({ error: "Authentication required" });
-
-    // Events I'm invited to or created
-    const events = await prisma.calendarEvent.findMany({
-      where: {
-        status:    "ACTIVE",
-        startTime: { lte: endDate },
-        endTime:   { gte: fromDate },
-        OR: [
-          { createdById: employeeId },
-          { attendees: { some: { employeeId } } },
-          { visibility: "PUBLIC" },
-        ],
-      },
-      orderBy: { startTime: "asc" },
-      include: {
-        createdBy: { select: { id: true, firstName: true, lastName: true } },
-        attendees: {
-          where:   { employeeId },
-          select:  { rsvpStatus: true, isOrganizer: true },
+    const emp = await prisma.employee.findUnique({ where: { id: employeeId }, select: { departmentId: true } });
+    const [events, holidays, attendanceSummaries] = await Promise.all([
+      prisma.calendarEvent.findMany({
+        where: {
+          status: "ACTIVE", startTime: { lte: endDate }, endTime: { gte: fromDate },
+          OR: [
+            { visibility: "PUBLIC" },
+            { createdById: employeeId },
+            { attendees: { some: { employeeId } } },
+            { visibility: "DEPARTMENT", departmentId: emp?.departmentId },
+          ],
         },
-      },
-    });
-
-    // Holidays
-    const holidays = await prisma.holiday.findMany({
-      where: { isActive: true, date: { gte: fromDate, lte: endDate } },
-      orderBy: { date: "asc" },
-    });
-
-    // My attendance summaries
-    const attendanceSummaries = await prisma.attendanceSummary.findMany({
-      where: {
-        employeeId,
-        attendanceDate: { gte: fromDate, lte: endDate },
-      },
-      orderBy: { attendanceDate: "asc" },
-    });
-
-    return res.json({
-      success: true,
-      events,
-      holidays,
-      attendanceSummaries,
-    });
+        orderBy: { startTime: "asc" },
+        include: {
+          createdBy: { select: { id: true, firstName: true, lastName: true } },
+          attendees: { where: { employeeId }, select: { rsvpStatus: true, isOrganizer: true } },
+        },
+      }),
+      prisma.holiday.findMany({ where: { isActive: true, date: { gte: fromDate, lte: endDate } }, orderBy: { date: "asc" } }),
+      prisma.attendanceSummary.findMany({ where: { employeeId, attendanceDate: { gte: fromDate, lte: endDate } }, orderBy: { attendanceDate: "asc" } }),
+    ]);
+    return res.json({ success: true, events, holidays, attendanceSummaries });
   } catch (err) {
     console.error("[getMyCalendar]", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION G — UPCOMING EVENTS (Dashboard widget)
-// ═══════════════════════════════════════════════════════════════════════════════
+async function getTeamView(req, res) {
+  try {
+    const { from = new Date().toISOString().split("T")[0], to, departmentId } = req.query;
+    const toDate = to || from;
+    const employees = await prisma.employee.findMany({
+      where: { deletedAt: null, isActive: true, ...(departmentId ? { departmentId: parseInt(departmentId) } : {}) },
+      orderBy: { firstName: "asc" },
+      select: { id: true, firstName: true, lastName: true, workEmail: true, department: { select: { name: true } }, designation: { select: { name: true } } },
+    });
+    const employeeIds = employees.map(e => e.id);
+    const fromDate = new Date(from);
+    const endDate  = new Date(toDate + "T23:59:59");
+    const [summaries, eventAttendances, holidays] = await Promise.all([
+      prisma.attendanceSummary.findMany({ where: { employeeId: { in: employeeIds }, attendanceDate: { gte: fromDate, lte: endDate } } }),
+      prisma.eventAttendee.findMany({
+        where: { employeeId: { in: employeeIds }, event: { status: "ACTIVE", startTime: { lte: endDate }, endTime: { gte: fromDate } } },
+        include: { event: { select: { id: true, title: true, startTime: true, endTime: true, eventType: true, meetLink: true } } },
+      }),
+      prisma.holiday.findMany({ where: { isActive: true, date: { gte: fromDate, lte: endDate } } }),
+    ]);
+    const eventAttendanceMap = new Map();
+    eventAttendances.forEach(ea => {
+      if (!eventAttendanceMap.has(ea.employeeId)) eventAttendanceMap.set(ea.employeeId, []);
+      eventAttendanceMap.get(ea.employeeId).push(ea.event);
+    });
+    const teamData = employees.map(emp => ({
+      employee: emp,
+      attendanceDays: summaries.filter(s => s.employeeId === emp.id).map(s => ({
+        date: s.attendanceDate.toISOString().split("T")[0], status: s.status,
+      })),
+      meetings: eventAttendanceMap.get(emp.id) || [],
+    }));
+    return res.json({ success: true, teamData, holidays, dateRange: { from, to: toDate } });
+  } catch (err) {
+    console.error("[getTeamView]", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/calendar/upcoming
-// Query: { days = 7, limit = 10 }
-// Returns next N events + holidays for the dashboard
-// ─────────────────────────────────────────────────────────────────────────────
 async function getUpcomingEvents(req, res) {
   try {
     const { days = 7, limit = 10 } = req.query;
-    const employeeId =  await getEmployeeIdFromReq(req);
-
-    const now  = new Date();
-    const end  = new Date(now.getTime() + parseInt(days) * 864e5);
-
+    const employeeId = await getEmployeeIdFromReq(req);
+    const now = new Date();
+    const end = new Date(now.getTime() + parseInt(days) * 864e5);
+    const emp = employeeId ? await prisma.employee.findUnique({ where: { id: employeeId }, select: { departmentId: true } }) : null;
     const [events, holidays] = await Promise.all([
       prisma.calendarEvent.findMany({
         where: {
-          status:    "ACTIVE",
-          startTime: { gte: now, lte: end },
+          status: "ACTIVE", startTime: { gte: now, lte: end },
           OR: [
             { visibility: "PUBLIC" },
             { createdById: employeeId },
             { attendees: { some: { employeeId } } },
+            { visibility: "DEPARTMENT", departmentId: emp?.departmentId },
           ],
         },
-        orderBy: { startTime: "asc" },
-        take:    parseInt(limit),
-        include: {
-          createdBy: { select: { id: true, firstName: true, lastName: true } },
-          _count:    { select: { attendees: true } },
-        },
+        orderBy: { startTime: "asc" }, take: parseInt(limit),
+        include: { createdBy: { select: { id: true, firstName: true, lastName: true } }, _count: { select: { attendees: true } } },
       }),
-      prisma.holiday.findMany({
-        where: { isActive: true, date: { gte: now, lte: end } },
-        orderBy: { date: "asc" },
-      }),
+      prisma.holiday.findMany({ where: { isActive: true, date: { gte: now, lte: end } }, orderBy: { date: "asc" } }),
     ]);
-
     return res.json({ success: true, events, holidays });
   } catch (err) {
     console.error("[getUpcomingEvents]", err);
@@ -1037,70 +637,21 @@ async function getUpcomingEvents(req, res) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION H — ADMIN OVERVIEW
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/calendar/admin/overview
-// Query: { month, year }
-// Returns full month stats for admin dashboard
-// ─────────────────────────────────────────────────────────────────────────────
 async function getAdminOverview(req, res) {
   try {
-    const {
-      year  = new Date().getFullYear(),
-      month = new Date().getMonth() + 1,
-    } = req.query;
-
+    const { year = new Date().getFullYear(), month = new Date().getMonth() + 1 } = req.query;
     const { start, end } = monthRange(parseInt(year), parseInt(month));
-
-    const [totalEvents, totalHolidays, upcomingEvents, recentEvents] = await Promise.all([
-      prisma.calendarEvent.count({
-        where: { status: "ACTIVE", startTime: { gte: start, lte: end } },
-      }),
-      prisma.holiday.count({
-        where: { isActive: true, date: { gte: start, lte: end } },
-      }),
-      prisma.calendarEvent.findMany({
-        where: { status: "ACTIVE", startTime: { gte: new Date() }, endTime: { lte: end } },
-        orderBy: { startTime: "asc" },
-        take: 5,
-        include: {
-          createdBy: { select: { firstName: true, lastName: true } },
-          _count: { select: { attendees: true } },
-        },
-      }),
-      prisma.calendarEvent.findMany({
-        where: { startTime: { gte: start, lte: end } },
-        orderBy: { createdAt: "desc" },
-        take: 10,
-        include: {
-          createdBy: { select: { firstName: true, lastName: true } },
-          _count: { select: { attendees: true } },
-        },
-      }),
+    const [totalEvents, totalHolidays, upcomingEvents, recentEvents, typeBreakdown] = await Promise.all([
+      prisma.calendarEvent.count({ where: { status: "ACTIVE", startTime: { gte: start, lte: end } } }),
+      prisma.holiday.count({ where: { isActive: true, date: { gte: start, lte: end } } }),
+      prisma.calendarEvent.findMany({ where: { status: "ACTIVE", startTime: { gte: new Date() }, endTime: { lte: end } }, orderBy: { startTime: "asc" }, take: 5, include: { createdBy: { select: { firstName: true, lastName: true } }, _count: { select: { attendees: true } } } }),
+      prisma.calendarEvent.findMany({ where: { startTime: { gte: start, lte: end } }, orderBy: { createdAt: "desc" }, take: 10, include: { createdBy: { select: { firstName: true, lastName: true } }, _count: { select: { attendees: true } } } }),
+      prisma.calendarEvent.groupBy({ by: ["eventType"], where: { status: "ACTIVE", startTime: { gte: start, lte: end } }, _count: { id: true } }),
     ]);
-
-    // Event type breakdown
-    const typeBreakdown = await prisma.calendarEvent.groupBy({
-      by:    ["eventType"],
-      where: { status: "ACTIVE", startTime: { gte: start, lte: end } },
-      _count: { id: true },
-    });
-
     return res.json({
       success: true,
-      stats: {
-        totalEvents,
-        totalHolidays,
-        typeBreakdown: typeBreakdown.map(t => ({
-          type:  t.eventType,
-          count: t._count.id,
-        })),
-      },
-      upcomingEvents,
-      recentEvents,
+      stats: { totalEvents, totalHolidays, typeBreakdown: typeBreakdown.map(t => ({ type: t.eventType, count: t._count.id })) },
+      upcomingEvents, recentEvents,
     });
   } catch (err) {
     console.error("[getAdminOverview]", err);
@@ -1108,30 +659,10 @@ async function getAdminOverview(req, res) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// EXPORTS
-// ═══════════════════════════════════════════════════════════════════════════════
 module.exports = {
-  // Holidays
-  getHolidays,
-  createHoliday,
-  updateHoliday,
-  deleteHoliday,
-
-  // Events
-  getEvents,
-  getEventById,
-  createEvent,
-  updateEvent,
-  cancelEvent,
-
-  // Attendees / RSVP
-  respondToEvent,
-  inviteAttendees,
-
-  // Views
-  getTeamView,
-  getMyCalendar,
-  getUpcomingEvents,
-  getAdminOverview,
+  getHolidays, createHoliday, updateHoliday, deleteHoliday,
+  getEvents, getEventById, createEvent, updateEvent, cancelEvent,
+  respondToEvent, inviteAttendees,
+  getMyNotifications, markNotificationRead, markAllNotificationsRead,
+  getMyCalendar, getTeamView, getUpcomingEvents, getAdminOverview,
 };

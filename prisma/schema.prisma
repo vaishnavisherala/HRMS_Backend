@@ -320,6 +320,12 @@ model Employee {
   eventAttendances EventAttendee[]
   calendarSync     EmployeeCalendarSync?
   createdHolidays  Holiday[]             @relation("HolidayCreatedBy")
+
+
+
+  leaveBalances    EmployeeLeaveBalance[]
+ leaveRequests    LeaveRequest[]
+  leaveApprovals   LeaveApproval[]   @relation("LeaveApprover")  
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -636,4 +642,101 @@ model EventReminder {
 
   @@index([remindAt, isSent])
   @@map("event_reminders")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODULE 7 — LEAVE MANAGEMENT
+// Add these models to the BOTTOM of your prisma/schema.prisma
+// Run: npx prisma migrate dev --name add_leave_module
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── 1. Leave Types (policy rules) ────────────────────────────────────────────
+model LeaveType {
+  id               Int      @id @default(autoincrement())
+  code             String   @unique   // EL, SL, CL, ML, PL, BL, COL, WFH, LWP
+  name             String             // Earned Leave, Sick Leave …
+  maxDaysPerYear   Decimal  @db.Decimal(5, 1)
+  carryForwardDays Decimal  @default(0) @db.Decimal(5, 1)
+  encashable       Boolean  @default(false)
+  requiresDoc      Boolean  @default(false)  // medical cert for SL
+  applicableGender String   @default("ALL")  // ALL | MALE | FEMALE | OTHER
+  minServiceDays   Int      @default(0)       // eligibility: days since joining
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  balances  EmployeeLeaveBalance[]
+  requests  LeaveRequest[]
+
+  @@map("leave_types")
+}
+
+// ── 2. Employee Leave Balances (one row per employee per leave type per year) ─
+model EmployeeLeaveBalance {
+  id              Int      @id @default(autoincrement())
+  employeeId      Int
+  leaveTypeId     Int
+  year            Int                // calendar year e.g. 2026
+  openingBalance  Decimal  @default(0) @db.Decimal(5, 1)  // balance at year start
+  accrued         Decimal  @default(0) @db.Decimal(5, 1)  // earned during year
+  carryForwarded  Decimal  @default(0) @db.Decimal(5, 1)  // brought from prev year
+  used            Decimal  @default(0) @db.Decimal(5, 1)  // approved leaves taken
+  encashed        Decimal  @default(0) @db.Decimal(5, 1)  // days encashed
+  lapsed          Decimal  @default(0) @db.Decimal(5, 1)  // lapsed at year-end
+  // closing_balance = openingBalance + accrued + carryForwarded - used - encashed - lapsed
+  // Computed in application layer (Prisma doesn't support GENERATED columns)
+  updatedAt       DateTime @updatedAt
+
+  employee    Employee   @relation(fields: [employeeId], references: [id])
+  leaveType   LeaveType  @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([employeeId, leaveTypeId, year])
+  @@index([employeeId, year])
+  @@map("employee_leave_balances")
+}
+
+// ── 3. Leave Requests ─────────────────────────────────────────────────────────
+model LeaveRequest {
+  id               Int      @id @default(autoincrement())
+  employeeId       Int
+  leaveTypeId      Int
+  fromDate         DateTime @db.Date
+  toDate           DateTime @db.Date
+  durationDays     Decimal  @db.Decimal(5, 1)   // supports 0.5 for half-day
+  halfDayIndicator String   @default("NONE")    // NONE | FIRST | SECOND
+  reason           String?
+  medicalDocUrl    String?                        // for sick leave
+  status           String   @default("PENDING") // PENDING | APPROVED | REJECTED | CANCELLED | WITHDRAWN
+  appliedAt        DateTime @default(now())
+  cancelledAt      DateTime?
+  cancelReason     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  employee   Employee       @relation(fields: [employeeId], references: [id])
+  leaveType  LeaveType      @relation(fields: [leaveTypeId], references: [id])
+  approvals  LeaveApproval[]
+
+  @@index([employeeId, status])
+  @@index([fromDate, toDate])
+  @@map("leave_requests")
+}
+
+// ── 4. Leave Approvals (multi-level chain) ────────────────────────────────────
+model LeaveApproval {
+  id          Int      @id @default(autoincrement())
+  requestId   Int
+  approverId  Int                              // manager or HR employee
+  level       Int      @default(1)            // L1 = direct manager, L2 = HR, L3 = CHRO
+  action      String   @default("PENDING")   // PENDING | APPROVED | REJECTED | ESCALATED
+  comments    String?
+  actionedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  request   LeaveRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approver  Employee     @relation("LeaveApprover", fields: [approverId], references: [id])
+
+  @@index([requestId])
+  @@index([approverId, action])
+  @@map("leave_approvals")
 }

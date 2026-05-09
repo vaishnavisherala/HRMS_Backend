@@ -7,7 +7,7 @@ const app = express();
 app.use(cors({
  origin: [
     "http://localhost:8081",
-    "http://10.113.178.55:8081"
+    "http://10.73.160.55:8081"
   ],
   credentials: true
 }));
@@ -25,6 +25,8 @@ app.use("/api/attendance", require("./src/routes/attendance.routes"));
 
 app.use("/api/calendar",   require("./src/routes/calendar.routes"));
 
+app.use("/api/leaves",     require("./src/routes/leave.routes"));
+
 //employee profile routes
 app.use("/api/employees",  require("./src/routes/profile.routes"));
 
@@ -41,4 +43,6 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on ${PORT}`);
+});
