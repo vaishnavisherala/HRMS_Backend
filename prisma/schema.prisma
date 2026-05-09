@@ -1,11 +1,8 @@
-<<<<<<< HEAD
-=======
 // HRMS Phase 1 - Complete Prisma Schema
 // Two Elephants Technologies LLP | v1.0 | April 2026
 // Modules: Lookup & Reference | Auth & System | Organisation Masters
 //          Employee Core & Profile | Attendance Management
 
->>>>>>> b4fb8b0bec2fd78eef6cc334bde511aa71d462c2
 generator client {
   provider = "prisma-client-js"
 }
@@ -15,95 +12,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-<<<<<<< HEAD
-model Admin {
-  admin_id  Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now())
-}
-
-model Employee {
-  emp_id    Int      @id @default(autoincrement())
-  f_name String   @default("Unknown")
-  m_name String   @default("Unknown")
-  l_name String   @default("Unknown")
-
-  email     String   @unique
-  password  String?
-  is_active Boolean  @default(false)
-  DOJ       DateTime @default(now())
-  Gender    String   @default("Unknown")
-  createdAt DateTime @default(now())
-
-  details          EmployeeDetails?  @relation("EmployeeToDetails") // ✅ FIX HERE
-  activationTokens ActivationToken[]
-  
-  attendance Attendance[]
-}
-
-model EmployeeDetails {
-  emp_id   Int      @id
-  employee Employee @relation("EmployeeToDetails", fields: [emp_id], references: [emp_id])
-
-  dob       DateTime
-  perm_addr String
-  work_addr String
-  comm_addr String
-
-  aadhar_no String @unique @db.VarChar(12)
-  pan_card  String @unique @db.VarChar(10)
-
-  phone_no_pri String  @db.VarChar(15)
-  phone_no_sec String? @db.VarChar(15)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([emp_id])
-}
-
-model ActivationToken {
-  id     Int      @id @default(autoincrement())
-  token  String   @unique
-  emp_id Int
-  expiry DateTime
-  isUsed Boolean  @default(false)
-
-  employee Employee @relation(fields: [emp_id], references: [emp_id])
-
-  @@index([emp_id])
-}
-
-
-model Attendance {
-  id        Int      @id @default(autoincrement())
-  emp_id    Int
-  employee  Employee @relation(fields: [emp_id], references: [emp_id])
-
-  date      DateTime
-  check_in  DateTime?
-  check_out DateTime?
-
-  status    String   @default("Present") // Present / Absent / Half-day
-  reason String?
-  createdAt DateTime @default(now())
-  
-  @@unique([emp_id, date]) // 
-}
-
-
-
-// Logout
-
-model BlacklistedToken {
-  id     Int    @id @default(autoincrement())
-  token  String @unique
-  createdAt DateTime @default(now())
-}
-
-=======
 // ─────────────────────────────────────────────────────────────────────────────
 // MODULE 1 — LOOKUP & REFERENCE (5 Tables)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -288,6 +196,9 @@ model Department {
   employees    Employee[]   @relation("EmployeeDept")
   designations Designation[]
 
+  calendarEvents   CalendarEvent[]
+
+
   @@map("departments")
 }
 
@@ -404,6 +315,11 @@ model Employee {
   headOfDepartments  Department[] @relation("DeptHead")
 
   @@map("employees")
+
+  createdEvents    CalendarEvent[]       @relation("EventCreatedBy")
+  eventAttendances EventAttendee[]
+  calendarSync     EmployeeCalendarSync?
+  createdHolidays  Holiday[]             @relation("HolidayCreatedBy")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -611,4 +527,113 @@ model AttendanceSummary {
   @@index([attendanceDate])
   @@map("attendance_summaries")
 }
->>>>>>> b4fb8b0bec2fd78eef6cc334bde511aa71d462c2
+
+//calenders
+
+model Holiday {
+  id          Int      @id @default(autoincrement())
+  name        String
+  date        DateTime @db.Date
+  type        String   @default("NATIONAL")   // NATIONAL | REGIONAL | OPTIONAL | COMPANY
+  stateCode   String?                          // null = all | "MH" = Maharashtra only
+  description String?
+  isActive    Boolean  @default(true)
+  createdById Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy Employee? @relation("HolidayCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([date, type, stateCode])
+  @@index([date])
+  @@map("holidays")
+}
+
+model CalendarEvent {
+  id             Int      @id @default(autoincrement())
+  title          String
+  description    String?
+  eventType      String                        // MEETING | TRAINING | COMPANY_EVENT
+                                               // BIRTHDAY | ANNIVERSARY | REMINDER | OTHER
+  startTime      DateTime
+  endTime        DateTime
+  isAllDay       Boolean  @default(false)
+  location       String?
+  meetLink       String?
+  visibility     String   @default("PUBLIC")  // PUBLIC | DEPARTMENT | PRIVATE
+  status         String   @default("ACTIVE")  // ACTIVE | CANCELLED | POSTPONED
+
+  isRecurring    Boolean   @default(false)
+  recurrenceRule String?                       // RRULE: "FREQ=WEEKLY;BYDAY=MO,WE,FR"
+  recurrenceEnd  DateTime?
+  parentEventId  Int?
+
+  createdById    Int
+  departmentId   Int?
+  googleEventId  String?
+  outlookEventId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdBy   Employee       @relation("EventCreatedBy", fields: [createdById], references: [id])
+  department  Department?    @relation(fields: [departmentId], references: [id])
+  parentEvent CalendarEvent?  @relation("RecurringInstances", fields: [parentEventId], references: [id])
+  instances   CalendarEvent[] @relation("RecurringInstances")
+  attendees   EventAttendee[]
+
+  @@index([startTime, endTime])
+  @@index([createdById])
+  @@map("calendar_events")
+}
+
+model EventAttendee {
+  id          Int      @id @default(autoincrement())
+  eventId     Int
+  employeeId  Int
+  isOrganizer Boolean  @default(false)
+  rsvpStatus  String   @default("PENDING")   // PENDING | ACCEPTED | DECLINED | TENTATIVE
+  notifiedAt  DateTime?
+  respondedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  event    CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  employee Employee      @relation(fields: [employeeId], references: [id])
+
+  @@unique([eventId, employeeId])
+  @@index([employeeId])
+  @@map("event_attendees")
+}
+
+model EmployeeCalendarSync {
+  id           Int      @id @default(autoincrement())
+  employeeId   Int      @unique
+  provider     String                         // GOOGLE | OUTLOOK
+  accessToken  String
+  refreshToken String
+  tokenExpiry  DateTime?
+  calendarId   String   @default("primary")
+  syncToken    String?
+  lastSyncedAt DateTime?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("employee_calendar_syncs")
+}
+
+model EventReminder {
+  id         Int      @id @default(autoincrement())
+  eventId    Int
+  employeeId Int
+  remindAt   DateTime
+  method     String   @default("EMAIL")       // EMAIL | IN_APP | BOTH
+  isSent     Boolean  @default(false)
+  sentAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([remindAt, isSent])
+  @@map("event_reminders")
+}
