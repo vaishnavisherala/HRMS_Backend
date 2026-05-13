@@ -24,6 +24,10 @@ router.get( "/balances/:employeeCode",       authenticate,                      
 router.put( "/balances/adjust",              authenticate, requireRole("admin"), adjustBalance);
 router.post("/balances/initialize-year",     authenticate, requireRole("admin"), initializeYearBalances);
 
+// dashboard
+
+
+
 // ── Requests ──────────────────────────────────────────────────────────────────
 router.post("/requests",                     authenticate, applyLeave);
 router.get( "/requests/my",                  authenticate, getMyRequests);
